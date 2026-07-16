@@ -1,0 +1,172 @@
+#!/usr/bin/env bash
+# mnode - mihomo 节点管理 (CLI 版 zashboard)
+# 依赖 mihomo 的 external-controller API (默认 127.0.0.1:9090)
+set -euo pipefail
+
+API="${MIHOMO_API:-http://127.0.0.1:9090}"
+SECRET="${MIHOMO_SECRET:-}"
+GROUP="${MIHOMO_GROUP:-PROXY}"   # 默认操作的策略组
+TESTURL="http://www.gstatic.com/generate_204"
+
+auth=(); [ -n "$SECRET" ] && auth=(-H "Authorization: Bearer $SECRET")
+
+api() { curl -s "${auth[@]}" "$API$1" "${@:2}"; }
+
+need_py() { command -v python3 >/dev/null || { echo "需要 python3"; exit 1; }; }
+
+check_up() {
+  if ! curl -s --max-time 2 "${auth[@]}" "$API/version" >/dev/null 2>&1; then
+    echo "✗ 连不上 mihomo API ($API)。先启动服务: sudo systemctl start mihomo"
+    exit 1
+  fi
+}
+
+cmd="${1:-help}"
+
+case "$cmd" in
+  status|st)
+    check_up
+    ver=$(api /version | python3 -c "import sys,json;print(json.load(sys.stdin).get('version','?'))")
+    echo "mihomo 运行中, 版本 $ver, API $API"
+    now=$(api "/proxies/$GROUP" | python3 -c "import sys,json;print(json.load(sys.stdin).get('now','?'))")
+    echo "当前 [$GROUP] 选中: $now"
+    ;;
+
+  groups|g)
+    check_up
+    api /proxies | python3 -c '
+import sys,json
+d=json.load(sys.stdin)["proxies"]
+for k,v in d.items():
+    t=v.get("type","")
+    if t in ("Selector","URLTest","Fallback","LoadBalance"):
+        print("%s  (%s)  -> now: %s" % (k, t, v.get("now","")))'
+    ;;
+
+  list|ls)
+    check_up
+    g="${2:-$GROUP}"
+    api "/proxies/$g" | python3 -c '
+import sys,json
+d=json.load(sys.stdin)
+now=d.get("now")
+allp=d.get("all",[])
+for i,name in enumerate(allp,1):
+    mark="*" if name==now else " "
+    print(f"{mark} {i:3d}  {name}")' 2>/dev/null || { echo "找不到策略组 '$g'。用 'mnode groups' 查看可用组。"; exit 1; }
+    ;;
+
+  use|u)
+    check_up
+    g="$GROUP"; sel="${2:-}"
+    [ -z "$sel" ] && { echo "用法: mnode use <编号|名称>  [-g 组名]"; exit 1; }
+    # 支持 -g 指定组
+    if [ "${3:-}" = "-g" ] && [ -n "${4:-}" ]; then g="$4"; fi
+    # 如果是纯数字, 按编号取名字
+    if [[ "$sel" =~ ^[0-9]+$ ]]; then
+      sel=$(api "/proxies/$g" | python3 -c "import sys,json;a=json.load(sys.stdin)['all'];print(a[$sel-1] if 0<$sel<=len(a) else '')")
+      [ -z "$sel" ] && { echo "编号超出范围"; exit 1; }
+    fi
+    code=$(curl -s -o /dev/null -w "%{http_code}" "${auth[@]}" -X PUT "$API/proxies/$g" \
+      -H "Content-Type: application/json" -d "{\"name\":\"$sel\"}")
+    if [ "$code" = "204" ]; then echo "✓ [$g] 已切换到: $sel"; else echo "✗ 切换失败 (HTTP $code), 名称可能不对"; exit 1; fi
+    ;;
+
+  test|t)
+    check_up
+    g="${2:-$GROUP}"
+    echo "正在对 [$g] 全部节点测速 (可能需要几秒)..."
+    api "/group/$g/delay?url=$TESTURL&timeout=5000" | python3 -c '
+import sys,json
+d=json.load(sys.stdin)
+if isinstance(d,dict) and "message" in d and "delay" not in d:
+    print("测速出错:",d["message"]); sys.exit(1)
+items=sorted(d.items(), key=lambda x:x[1])
+for name,ms in items:
+    print(f"{ms:5d} ms  {name}")' 2>/dev/null || echo "测速失败, 确认组名正确 (mnode groups)"
+    ;;
+
+  ip)
+    check_up
+    echo "通过代理查询出口 IP..."
+    curl -s --max-time 20 -x http://127.0.0.1:7890 https://ipinfo.io/json | python3 -c "import sys,json;d=json.load(sys.stdin);print('IP:',d.get('ip'),'| 地区:',d.get('country'),d.get('city'),'| ISP:',d.get('org'))" 2>&1 || echo "查询失败"
+    ;;
+
+  on)   sudo systemctl start mihomo && echo "✓ mihomo 已启动"; sleep 2; "$0" status ;;
+  off)  sudo systemctl stop mihomo && echo "✓ mihomo 已停止" ;;
+
+  update|up)
+    SUB="/etc/mihomo/sub.b64"
+    CFG="/etc/mihomo/config.yaml"
+    BUILD="/etc/mihomo/build-config.py"
+    # 从 stdin 读取新的 base64 订阅 (管道/重定向), 无输入则沿用现有 sub.b64
+    if [ ! -t 0 ]; then
+      tmp=$(mktemp)
+      cat > "$tmp"
+      if [ -s "$tmp" ]; then
+        cp "$SUB" "$SUB.bak" 2>/dev/null || true
+        mv "$tmp" "$SUB"
+        echo "✓ 已写入新订阅 ($(wc -c < "$SUB") 字节), 旧文件备份为 $SUB.bak"
+      else
+        rm -f "$tmp"
+        echo "· 未收到新订阅内容, 使用现有 $SUB"
+      fi
+    else
+      echo "· 未提供新订阅 (可用: mnode update < 文件, 或粘贴管道), 使用现有 $SUB"
+    fi
+    # 备份旧配置, 重新生成, 验证
+    cp "$CFG" "$CFG.bak" 2>/dev/null || true
+    echo "→ 生成配置..."
+    if ! python3 "$BUILD"; then echo "✗ 生成失败, 配置未改动 (旧配置在 $CFG.bak)"; exit 1; fi
+    echo "→ 验证配置..."
+    if ! /usr/local/bin/mihomo -d /etc/mihomo -t >/dev/null 2>&1; then
+      echo "✗ 配置验证失败! 回滚到旧配置。"
+      cp "$CFG.bak" "$CFG" 2>/dev/null || true
+      /usr/local/bin/mihomo -d /etc/mihomo -t 2>&1 | tail -5
+      exit 1
+    fi
+    n=$(grep -c '  - {name:' "$CFG" 2>/dev/null || echo "?")
+    echo "✓ 配置验证通过 ($n 个节点)"
+    # 若服务在运行则重启使其生效
+    if systemctl is-active --quiet mihomo; then
+      sudo systemctl restart mihomo && echo "✓ mihomo 已重启, 新配置生效"
+    else
+      echo "· mihomo 当前未运行, 下次 mnode on 时生效"
+    fi
+    ;;
+
+  help|*)
+    cat <<'H'
+mnode - mihomo 节点管理 (命令行)
+
+服务开关:
+  mnode on              启动 mihomo
+  mnode off             停止 mihomo
+  mnode status          查看运行状态和当前节点
+
+选节点:
+  mnode groups          列出所有策略组
+  mnode list [组]       列出组内节点 (默认 PROXY 组), * 表示当前选中
+  mnode use <编号>      切换到指定编号的节点 (在 PROXY 组)
+  mnode use <名称>      按名称切换
+  mnode use <名称> -g AUTO   指定在某个组里切换
+  mnode test [组]       对组内节点测速并按延迟排序
+
+更新订阅:
+  mnode update              沿用现有 sub.b64, 重新生成并验证配置(运行中则重启)
+  mnode update < 文件       从文件读取新的 base64 订阅后更新
+  粘贴方式更新:
+    mnode update <<'EOF'
+    (在此粘贴 base64, 多行也可)
+    EOF
+
+其他:
+  mnode ip              通过代理查看当前出口 IP
+
+说明:
+  - PROXY 组是手动选择组, 里面第一个 "AUTO" 是自动测速组
+  - 想手动定一个节点: mnode list 看编号 -> mnode use 编号
+  - 想让它自动挑最快: mnode use AUTO
+H
+    ;;
+esac

@@ -1,0 +1,10 @@
+# Never commit subscription content or generated config — they contain credentials
+sub.b64
+sub.b64.bak
+config.yaml
+config.yaml.bak
+*.metadb
+*.mmdb
+# secrets in general
+*.token
+.env
