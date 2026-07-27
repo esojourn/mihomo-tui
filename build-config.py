@@ -1,9 +1,18 @@
 #!/usr/bin/env python3
 # Convert a base64 Shadowsocks subscription (SIP002 ss:// links) into a mihomo config.yaml
+import argparse
 import base64, sys, urllib.parse, re
 
 SUB = "/etc/mihomo/sub.b64"
 OUT = "/etc/mihomo/config.yaml"
+
+
+def parse_args():
+    p = argparse.ArgumentParser(description="Build a mihomo config from an ss:// subscription")
+    p.add_argument("--mode", choices=("mixed", "tun"), default="mixed")
+    p.add_argument("--subscription", default=SUB)
+    p.add_argument("--output", default=OUT)
+    return p.parse_args()
 
 def b64pad(s):
     return s + "=" * (-len(s) % 4)
@@ -68,7 +77,8 @@ def yesc(s):
     return '"' + str(s).replace('\\', '\\\\').replace('"', '\\"') + '"'
 
 def main():
-    with open(SUB) as f:
+    opts = parse_args()
+    with open(opts.subscription) as f:
         raw = f.read()
     text = decode_sub(raw)
     nodes, seen = [], {}
@@ -91,6 +101,16 @@ def main():
     names = [n["name"] for n in nodes]
     L = []
     L.append("mixed-port: 7890")
+    if opts.mode == "tun":
+        L.extend([
+            "tun:",
+            "  enable: true",
+            "  stack: system",
+            "  auto-route: true",
+            "  auto-detect-interface: true",
+            "  dns-hijack:",
+            "    - any:53",
+        ])
     L.append("allow-lan: false")
     L.append("mode: rule")
     L.append("log-level: info")
@@ -130,9 +150,9 @@ def main():
     L.append("rules:")
     L.append("  - GEOIP,CN,DIRECT")
     L.append("  - MATCH,PROXY")
-    with open(OUT, "w") as f:
+    with open(opts.output, "w") as f:
         f.write("\n".join(L) + "\n")
-    print(f"OK: wrote {len(nodes)} nodes to {OUT}")
+    print(f"OK: wrote {len(nodes)} nodes to {opts.output} ({opts.mode} mode)")
 
 if __name__ == "__main__":
     main()

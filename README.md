@@ -11,7 +11,8 @@
 - 按编号或名称切换节点
 - 全组节点测速并按延迟排序
 - 查看当前出口 IP
-- 从 base64 订阅重建配置：自动备份、验证、失败回滚、运行中自动重启
+- 从 base64 订阅重建配置：候选配置验证、失败回滚、运行中自动重启
+- 在 mixed-port 与 TUN 接入模式间安全切换（`mnode mode`）
 
 ## 依赖
 
@@ -38,7 +39,12 @@ mnode use 2           # 切到 2 号节点
 mnode use AUTO        # 交给自动测速组
 mnode ip              # 查看当前出口 IP
 mnode off             # 用完关掉
+mnode mode            # 查看当前接入模式
+mnode mode tun        # 切换到 TUN（远程 SSH 默认拒绝）
+mnode mode mixed      # 切回 7890 mixed-port
 ```
+
+`mixed` 模式通过 `127.0.0.1:7890` 提供 HTTP 和 SOCKS5 代理，需要应用显式使用代理端口。`tun` 模式启用系统透明代理并同时保留 7890 端口，通常不需要设置代理环境变量，但仍兼容需要显式代理的程序。远程 SSH 会话切换 TUN 可能导致断联，建议使用云控制台或第二条管理链路；确需从 SSH 操作时显式使用 `--allow-ssh-risk`。
 
 让终端流量走代理：
 

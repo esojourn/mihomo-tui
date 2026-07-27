@@ -48,7 +48,19 @@ mnode ip                # 通过代理查看当前出口 IP（验证是否生效
 - **AUTO**：url-test 组，每 300 秒自动挑延迟最低的节点。
 - `mnode use` 默认操作 PROXY 组；`mnode use <名称> -g AUTO` 可指定其他组。
 
-## 四、让终端流量走代理
+## 四、选择接入模式
+
+```bash
+mnode mode             # 查看当前模式
+mnode mode mixed       # HTTP + SOCKS5，监听 127.0.0.1:7890
+mnode mode tun         # TUN 透明代理，同时保留 7890
+```
+
+`mixed` 模式只代理显式使用 7890 的程序。`tun` 模式启用系统透明代理并通过 TUN 接口接管流量，同时保留 7890 端口，通常无需设置代理环境变量，但仍兼容需要显式代理配置的程序。两种模式都继续使用现有节点、策略组和分流规则；切换会先生成候选配置并通过 `mihomo -t` 验证，然后才替换正式配置。
+
+> 在远程 SSH 会话中启用 TUN 可能改变路由并导致断联，因此默认拒绝。推荐通过云控制台或带外管理操作；确需继续时使用 `mnode mode tun --allow-ssh-risk`。tmux/screen 只能保留进程，不能防止网络断联。
+
+## 五、让终端流量走 mixed 代理
 
 mihomo 启动后，在需要走代理的终端里设置环境变量：
 
@@ -68,7 +80,7 @@ unset https_proxy http_proxy all_proxy
 
 > 提示：`git`、`npm`、`apt` 等大多数工具会自动读取这几个环境变量。个别工具需单独配置代理。
 
-## 五、更新订阅
+## 六、更新订阅
 
 节点变动时更新。因为本服务器出口是国内 IP，订阅链接被 Cloudflare 拦截（返回 403），无法直接 curl 下载，需手动获取 base64 内容。
 
@@ -102,10 +114,11 @@ mnode update
 ```
 
 `mnode update` 的执行过程：
-- 有新订阅内容 → 写入 `sub.b64`（旧的备份为 `sub.b64.bak`）
-- 备份旧配置为 `config.yaml.bak`，重新生成 `config.yaml`
-- `mihomo -t` 验证；**验证失败自动回滚到旧配置**，不影响正在运行的服务
-- 验证通过后，若服务在运行则自动重启；未运行则下次 `mnode on` 生效
+- 有新订阅内容时，先写入临时文件，不立即覆盖正式 `sub.b64`
+- 使用临时订阅生成候选配置，并通过 `mihomo -t` 验证
+- 验证成功后备份正式配置和订阅，再一起提交新版本
+- 若服务正在运行则重启；重启失败时配置和订阅一起回滚并尝试恢复服务
+- 若服务未运行则保留新配置，等下次 `mnode on` 生效
 
 ### 手动等价命令（排错备用）
 
@@ -119,7 +132,7 @@ python3 /etc/mihomo/build-config.py \
 
 > 订阅链接自行保管，不要提交到代码仓库。
 
-## 六、直接用 systemctl（mnode 的底层）
+## 七、直接用 systemctl（mnode 的底层）
 
 `mnode on/off` 等价于：
 
@@ -130,7 +143,7 @@ systemctl status mihomo     # 详细状态
 journalctl -u mihomo -f     # 实时日志（排错用）
 ```
 
-## 七、直接调 API（mnode 的底层，排错备用）
+## 八、直接调 API（mnode 的底层，排错备用）
 
 ```bash
 # 查看某组当前节点和全部节点
@@ -144,7 +157,7 @@ curl -X PUT http://127.0.0.1:9090/proxies/PROXY \
 curl -s "http://127.0.0.1:9090/group/PROXY/delay?url=http://www.gstatic.com/generate_204&timeout=5000"
 ```
 
-## 八、常见问题
+## 九、常见问题
 
 - **`mnode` 提示连不上 API**：mihomo 没运行，先 `mnode on`。
 - **代理不通 / `mnode ip` 失败**：换个节点（`mnode test` 找延迟低的，`mnode use` 切换）。部分节点可能失效。
@@ -153,7 +166,7 @@ curl -s "http://127.0.0.1:9090/group/PROXY/delay?url=http://www.gstatic.com/gene
   `curl -fsSL -o /etc/mihomo/geoip.metadb https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.metadb`
 - **想全局走代理（不分流）**：把 `config.yaml` 里 `rules:` 段改成只留 `- MATCH,PROXY`，或改 `build-config.py` 后重新生成。
 
-## 九、安全说明
+## 十、安全说明
 
 - 混合端口和管理 API 都只监听 `127.0.0.1`，仅本机可访问，未对外暴露。
 - `allow-lan: false`，不接受局域网其他设备连接。
