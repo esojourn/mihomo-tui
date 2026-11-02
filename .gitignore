@@ -8,3 +8,7 @@ config.yaml.bak
 # secrets in general
 *.token
 .env
+
+# Download cache and Python artifacts
+assets/
+__pycache__/

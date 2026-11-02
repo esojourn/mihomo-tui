@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Convert a base64 Shadowsocks subscription (SIP002 ss:// links) into a mihomo config.yaml
 import argparse
-import base64, sys, urllib.parse, re
+import base64, sys, urllib.parse, re, json, os
 
 SUB = "/etc/mihomo/sub.b64"
 OUT = "/etc/mihomo/config.yaml"
@@ -73,10 +73,10 @@ def parse_ss(line):
     return node
 
 def yesc(s):
-    # quote a yaml scalar safely
-    return '"' + str(s).replace('\\', '\\\\').replace('"', '\\"') + '"'
+    return json.dumps(str(s), ensure_ascii=False)
 
 def main():
+    os.umask(0o077)
     opts = parse_args()
     with open(opts.subscription) as f:
         raw = f.read()
@@ -111,6 +111,7 @@ def main():
             "  dns-hijack:",
             "    - any:53",
         ])
+    L.extend(["geodata-mode: false", "geo-auto-update: false", "geox-url:", "  mmdb: \"\""])
     L.append("allow-lan: false")
     L.append("mode: rule")
     L.append("log-level: info")
@@ -124,7 +125,7 @@ def main():
                 % (yesc(n["name"]), yesc(n["server"]), n["port"], yesc(n["cipher"]), yesc(n["password"])))
         if n.get("plugin") == "obfs":
             po = n["plugin-opts"]
-            line += ", plugin: obfs, plugin-opts: {mode: %s" % po.get("mode", "http")
+            line += ", plugin: obfs, plugin-opts: {mode: %s" % yesc(po.get("mode", "http"))
             if "host" in po:
                 line += ", host: %s" % yesc(po["host"])
             line += "}"

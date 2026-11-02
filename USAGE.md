@@ -1,22 +1,32 @@
 # mihomo 操作文档
 
-本机命令行下使用 mihomo 代理的完整说明。默认关闭，用时开、用完关。
+在命令行下使用 mihomo 代理的完整说明。默认关闭，用时开、用完关。
 
 ## 一、概览
 
 | 项目 | 值 |
 |------|-----|
-| 主程序 | `/usr/local/bin/mihomo`（v1.19.28, amd64-v3） |
+| 主程序 | `/usr/local/bin/mihomo`（v1.19.28，amd64 compatible / arm64） |
 | 配置目录 | `/etc/mihomo/` |
-| 主配置 | `/etc/mihomo/config.yaml`（335 个节点） |
+| 主配置 | `/etc/mihomo/config.yaml` |
 | 订阅原文 | `/etc/mihomo/sub.b64`（base64） |
 | 转换脚本 | `/etc/mihomo/build-config.py` |
 | 节点管理命令 | `/usr/local/bin/mnode` |
 | systemd 服务 | `/etc/systemd/system/mihomo.service`（未开机自启） |
 | 本地混合端口 | `127.0.0.1:7890`（http + socks5 共用） |
 | 管理 API | `127.0.0.1:9090`（external-controller） |
-| 节点类型 | Shadowsocks，`aes-128-gcm` + `simple-obfs`(http) 混淆 |
+| 节点类型 | Shadowsocks（支持 simple-obfs） |
 | 分流规则 | 国内直连（GEOIP,CN），其余走代理 |
+
+## 数字菜单
+
+安装说明见 [INSTALL.md](INSTALL.md)。执行 `mnode tui`（别名 `mnode menu`）进入中文数字菜单；无参数 `mnode` 仍显示帮助。
+
+菜单提供服务状态/启停、策略组选择、节点切换、AUTO、测速、接入模式、出口 IP、订阅更新/重建和帮助。节点每页 15 项，`n`/`p` 翻页、`f` 按名称筛选、`s` 输入完整名称、`0` 返回；编号总是映射到当前筛选结果中的完整节点名称。选择策略组只影响本菜单会话。
+
+命令失败显示原因后返回菜单。EOF 或 Ctrl-C 退出；非交互输入请用 CLI。服务启停和配置修改通过 sudo 按需提权，保留 `MIHOMO_*` 已支持变量及 SSH 会话信息；取消提权不执行操作。SSH 下启用 TUN 必须输入 `YES`，其他输入默认取消。
+
+粘贴订阅时以单独一行 `.` 结束，空内容取消；内容通过权限受限、自动清理的临时文件传递，不放入命令参数或历史。菜单本身不负责安装或内核升级，请使用 `install.sh`。
 
 ## 二、开关代理
 
@@ -36,6 +46,9 @@ mnode list | grep 香港   # 只看含"香港"的节点
 mnode groups            # 列出所有策略组（PROXY / AUTO / GLOBAL）
 mnode test              # 全部节点测速，按延迟从低到高排序
 mnode use 2             # 切换到 2 号节点
+mnode use --name "123"   # 明确选择名为 123 的节点（不是第 123 个）
+mnode groups --json     # 机器可读策略组
+mnode list PROXY --json # 机器可读节点与当前选择
 mnode use AUTO          # 交给自动测速组，自动选最快
 mnode ip                # 通过代理查看当前出口 IP（验证是否生效）
 ```
@@ -46,7 +59,7 @@ mnode ip                # 通过代理查看当前出口 IP（验证是否生效
 
 - **PROXY**：手动选择组，是实际生效的出口。里面第一项 `AUTO` 指向自动测速组。
 - **AUTO**：url-test 组，每 300 秒自动挑延迟最低的节点。
-- `mnode use` 默认操作 PROXY 组；`mnode use <名称> -g AUTO` 可指定其他组。
+- `mnode use` 默认操作 PROXY 组；`mnode use --name <名称> -g <组名>` 可指定其他组。URLTest 等自动组是否允许手动选择由内核决定，API 拒绝时会报告失败。
 
 ## 四、选择接入模式
 
@@ -82,7 +95,7 @@ unset https_proxy http_proxy all_proxy
 
 ## 六、更新订阅
 
-节点变动时更新。因为本服务器出口是国内 IP，订阅链接被 Cloudflare 拦截（返回 403），无法直接 curl 下载，需手动获取 base64 内容。
+节点变动时更新。在可访问订阅服务的设备上获取 base64 或明文 ss:// 订阅，然后通过本地文件或菜单传入。
 
 推荐用 `mnode update`，它会自动备份、生成、验证，失败自动回滚，服务在运行时还会自动重启使配置生效。
 
@@ -99,10 +112,12 @@ EOF
 ### 方式二：先存文件再更新
 
 ```bash
+umask 077
 cat > /tmp/newsub.b64 <<'EOF'
 （粘贴完整 base64）
 EOF
-mnode update < /tmp/newsub.b64
+mnode update /tmp/newsub.b64
+rm -f /tmp/newsub.b64
 ```
 
 ### 方式三：仅重建配置（不换订阅）
@@ -120,17 +135,13 @@ mnode update
 - 若服务正在运行则重启；重启失败时配置和订阅一起回滚并尝试恢复服务
 - 若服务未运行则保留新配置，等下次 `mnode on` 生效
 
-### 手动等价命令（排错备用）
+### 排错
 
 ```bash
-python3 /etc/mihomo/build-config.py \
-  && /usr/local/bin/mihomo -d /etc/mihomo -t \
-  && systemctl restart mihomo
+sudo /usr/local/bin/mihomo -d /etc/mihomo -t
 ```
 
-看到 `test is successful` 说明配置无误。
-
-> 订阅链接自行保管，不要提交到代码仓库。
+使用 `mnode update` 重建配置，以保留锁、候选验证和回滚逻辑。配置与订阅权限为 600；订阅及备份不得提交到仓库。
 
 ## 七、直接用 systemctl（mnode 的底层）
 
@@ -161,9 +172,8 @@ curl -s "http://127.0.0.1:9090/group/PROXY/delay?url=http://www.gstatic.com/gene
 
 - **`mnode` 提示连不上 API**：mihomo 没运行，先 `mnode on`。
 - **代理不通 / `mnode ip` 失败**：换个节点（`mnode test` 找延迟低的，`mnode use` 切换）。部分节点可能失效。
-- **配置改坏了**：`mihomo -d /etc/mihomo -t` 会指出错误行；重跑第五节的生成命令可还原。
-- **GeoIP 数据库**：位于 `/etc/mihomo/geoip.metadb`。若分流失效可从镜像重新下载：
-  `curl -fsSL -o /etc/mihomo/geoip.metadb https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.metadb`
+- **配置改坏了**：`mihomo -d /etc/mihomo -t` 会指出错误行；使用第六节的 `mnode update` 从订阅重建。
+- **GeoIP 数据库**：位于 `/etc/mihomo/geoip.metadb`，新配置使用本地数据库并关闭自动更新。请按 [INSTALL.md](INSTALL.md) 使用固定提交与 SHA-256 清单补齐；不要下载移动分支覆盖已验证的数据库。
 - **想全局走代理（不分流）**：把 `config.yaml` 里 `rules:` 段改成只留 `- MATCH,PROXY`，或改 `build-config.py` 后重新生成。
 
 ## 十、安全说明

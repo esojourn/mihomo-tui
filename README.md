@@ -6,6 +6,8 @@
 
 ## 功能
 
+- 中文数字菜单（`mnode tui` / `mnode menu`），支持分页、筛选和切换策略组
+- 固定版本、多来源摘要校验安装，支持离线部署和升级回滚
 - 一键开关代理服务（`on` / `off`）
 - 列出策略组和节点，标注当前选中项
 - 按编号或名称切换节点
@@ -23,15 +25,30 @@
 
 ## 安装
 
+获取同一版本的完整项目文件和本地订阅后：
+
 ```bash
-sudo install -m 755 mnode /usr/local/bin/mnode
+sudo bash install.sh --subscription ./sub.b64
+mnode tui
 ```
 
-`build-config.py` 放到 mihomo 配置目录（默认 `/etc/mihomo/`）即可。
+首次安装默认 mixed 模式，**不启动服务、不启用开机启动**。支持 Debian/Ubuntu、RHEL 系的 systemd 环境，amd64 compatible 和 arm64。需要 Python 3.8+、curl、util-linux（flock、unshare）及 root 网络命名空间权限。
+
+在线来源、固定提交下载、依赖准备、`scp` 上传目录、离线安装和升级恢复见 [INSTALL.md](INSTALL.md)。常用离线命令：
+
+```bash
+# 联网机器准备目标架构资源
+bash install.sh --download-only --arch amd64 --assets-dir ./assets
+# 将完整目录与订阅上传后，在目标机器执行
+sudo bash install.sh --offline --assets-dir ./assets --subscription ./sub.b64
+# 保留配置与订阅，升级到随项目清单固定的版本
+sudo bash install.sh --upgrade --offline --assets-dir ./assets
+```
 
 ## 快速上手
 
 ```bash
+mnode tui             # 中文数字菜单（也可 mnode menu）
 mnode on              # 启动 mihomo
 mnode list            # 列出节点，* 是当前选中
 mnode test            # 测速，按延迟排序
@@ -63,9 +80,16 @@ export https_proxy=http://127.0.0.1:7890 http_proxy=http://127.0.0.1:7890 all_pr
 | `MIHOMO_API` | `http://127.0.0.1:9090` | external-controller 地址 |
 | `MIHOMO_SECRET` | 空 | API 密钥（如已设置） |
 | `MIHOMO_GROUP` | `PROXY` | 默认操作的策略组 |
+| `MIHOMO_CONFIG_DIR` | `/etc/mihomo` | CLI 配置目录 |
+| `MIHOMO_BIN` | `/usr/local/bin/mihomo` | CLI 验证配置的内核 |
 
 ## 文件说明
 
+- `install.sh` / `install.py` — 安装、资源准备与升级
+- `assets.json` / `project-sha256.json` — 固定资源与 SHA-256 清单
+- `mnode-tui.py` — Python 标准库数字菜单
+- `INSTALL.md` — 在线与离线安装文档
+- `test-mnode.py` — 隔离回归测试
 - `mnode` — 主脚本
 - `build-config.py` — 把 base64 的 `ss://` 订阅转换成 mihomo `config.yaml`
 - `USAGE.md` — 完整中文操作文档

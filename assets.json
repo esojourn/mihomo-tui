@@ -1,0 +1,24 @@
+{
+  "version": "v1.19.28",
+  "geoip_commit": "1234686cec4ff41207931ee441a13ea4e26ebf13",
+  "assets": [
+    {
+      "name": "mihomo-linux-amd64-compatible-v1.19.28.gz",
+      "arch": "amd64",
+      "sha256": "70d01cfb8cb7bf7a92fd1af16cb4b9553d90bb4eecde3b5c4849103e27c80ddb",
+      "url": "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.28/mihomo-linux-amd64-compatible-v1.19.28.gz"
+    },
+    {
+      "name": "mihomo-linux-arm64-v1.19.28.gz",
+      "arch": "arm64",
+      "sha256": "2474450cd1c41dfa53036a54a4e85579f493d3af524d86c3d4b8e2b240b56cd2",
+      "url": "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.28/mihomo-linux-arm64-v1.19.28.gz"
+    },
+    {
+      "name": "geoip.metadb",
+      "sha256": "c54a1704ee3e245bec1cb65c2e2948311eeee532e2ea1eed09322425d28775be",
+      "url": "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/1234686cec4ff41207931ee441a13ea4e26ebf13/geoip.metadb",
+      "github_path": "MetaCubeX/meta-rules-dat@1234686cec4ff41207931ee441a13ea4e26ebf13/geoip.metadb"
+    }
+  ]
+}

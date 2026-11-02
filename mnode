@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # mnode - mihomo 节点管理 (CLI 版 zashboard)
 set -euo pipefail
+umask 077
 
 API="${MIHOMO_API:-http://127.0.0.1:9090}"
 SECRET="${MIHOMO_SECRET:-}"
@@ -14,14 +15,17 @@ BUILD="$CONFIG_DIR/build-config.py"
 LOCK="$CONFIG_DIR/.mnode.lock"
 
 auth=(); [ -n "$SECRET" ] && auth=(-H "Authorization: Bearer $SECRET")
-api() { curl -s "${auth[@]}" "$API$1" "${@:2}"; }
+api() { curl -fsS --connect-timeout 5 --max-time 45 "${auth[@]}" "$API$1" "${@:2}"; }
 
 check_up() {
-  if ! curl -s --max-time 2 "${auth[@]}" "$API/version" >/dev/null 2>&1; then
-    echo "✗ 连不上 mihomo API ($API)。先启动服务: sudo systemctl start mihomo"
+  if ! curl -fsS --max-time 2 "${auth[@]}" "$API/version" >/dev/null 2>&1; then
+    echo "✗ 连不上 mihomo API ($API)。先启动服务: mnode on"
     exit 1
   fi
 }
+
+encode() { python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"; }
+service() { if [ "$EUID" -eq 0 ]; then systemctl "$@"; else sudo systemctl "$@"; fi; }
 
 current_mode() {
   python3 - "$CFG" <<'PY'
@@ -29,7 +33,7 @@ import re, sys
 try:
     text = open(sys.argv[1]).read()
 except OSError:
-    print("mixed")
+    print("unknown")
     raise SystemExit
 block = re.search(r"(?ms)^tun:\s*\n((?:^[ \t]+.*\n?)*)", text)
 print("tun" if block and re.search(r"(?m)^\s+enable:\s*true\s*$", block.group(1)) else "mixed")
@@ -42,17 +46,20 @@ show_mode() {
   echo "当前接入模式: $mode"
   if [ "$mode" = tun ]; then
     echo "TUN: enabled (system stack, auto-route)"
-  else
+  elif [ "$mode" = mixed ]; then
     echo "Mixed port: 127.0.0.1:7890 (HTTP + SOCKS5)"
+  else
+    echo "无法读取配置；使用 sudo mnode mode 查看模式"
   fi
   systemctl is-active --quiet mihomo && echo "服务状态: active" || echo "服务状态: inactive"
 }
 
-apply_config() {
+apply_config() (
   local mode="$1" input="${2:-$SUB}" staging tmpcfg oldmode was_active=0
   oldmode=$(current_mode)
   systemctl is-active --quiet mihomo && was_active=1 || true
-  staging=$(mktemp -d "$CONFIG_DIR/.mnode-staging.XXXXXX")
+  staging=$(mktemp -d "$CONFIG_DIR/.mnode-staging.XXXXXX") || return 1
+  trap 'rm -rf "$staging"' EXIT
   tmpcfg="$staging/config.yaml"
 
   if ! python3 "$BUILD" --mode "$mode" --subscription "$input" --output "$tmpcfg"; then
@@ -67,19 +74,21 @@ apply_config() {
     return 1
   fi
 
-  cp -p "$CFG" "$CFG.bak"
-  [ "$input" = "$SUB" ] || cp -p "$SUB" "$SUB.bak"
-  cp -p "$tmpcfg" "$CFG"
+  cp -p "$CFG" "$CFG.bak" || return 1
+  if [ "$input" != "$SUB" ]; then cp -p "$SUB" "$SUB.bak" || return 1; fi
+  install -m 600 "$tmpcfg" "$CFG" || { cp -p "$CFG.bak" "$CFG"; return 1; }
   # 配置和订阅必须作为同一次提交；重启失败时二者一起回滚。
-  if [ "$input" != "$SUB" ]; then cp -p "$input" "$SUB"; fi
+  if [ "$input" != "$SUB" ]; then
+    install -m 600 "$input" "$SUB" || { cp -p "$CFG.bak" "$CFG"; cp -p "$SUB.bak" "$SUB"; return 1; }
+  fi
   rm -rf "$staging"
 
   if [ "$was_active" -eq 1 ]; then
-    if ! sudo systemctl restart mihomo || ! systemctl is-active --quiet mihomo; then
+    if ! service restart mihomo || ! systemctl is-active --quiet mihomo; then
       echo "✗ mihomo 重启失败，恢复 $oldmode 配置"
       cp -p "$CFG.bak" "$CFG"
       [ "$input" = "$SUB" ] || cp -p "$SUB.bak" "$SUB"
-      sudo systemctl restart mihomo || true
+      service restart mihomo || true
       return 1
     fi
     echo "✓ mihomo 已重启，新配置生效"
@@ -87,26 +96,40 @@ apply_config() {
     echo "· mihomo 当前未运行，下次 mnode on 时生效"
   fi
   echo "✓ 当前接入模式: $mode"
-}
+)
 
-update_config() {
-  local input="$SUB" tmp=""
-  if [ ! -t 0 ]; then
-    tmp=$(mktemp "$CONFIG_DIR/.mnode-sub.XXXXXX")
-    cat > "$tmp"
+update_config() (
+  local input="${1:-$SUB}" tmp="" result=0
+  trap '[ -z "$tmp" ] || rm -f "$tmp"' EXIT
+  if [ -z "${1:-}" ] && [ ! -t 0 ]; then
+    tmp=$(mktemp "$CONFIG_DIR/.mnode-sub.XXXXXX") || return 1
+    cat > "$tmp" || return 1
     if [ -s "$tmp" ]; then input="$tmp"; else rm -f "$tmp"; tmp=""; fi
   fi
-  apply_config "$(current_mode)" "$input"
+  apply_config "$(current_mode)" "$input" || result=$?
   [ -z "$tmp" ] || rm -f "$tmp"
-}
+  return "$result"
+)
 
 cmd="${1:-help}"
+if [ "$EUID" -ne 0 ]; then
+  case "$cmd" in
+    on|off|update|up|mode|m)
+      exec sudo --preserve-env=MIHOMO_API,MIHOMO_SECRET,MIHOMO_GROUP,MIHOMO_BIN,MIHOMO_CONFIG_DIR,SSH_CONNECTION,SSH_CLIENT -- "$0" "$@"
+      ;;
+  esac
+fi
 case "$cmd" in
+  tui|menu)
+    MENU="$CONFIG_DIR/mnode-tui.py"
+    [ -f "$MENU" ] || MENU="$(dirname -- "$(readlink -f -- "$0")")/mnode-tui.py"
+    exec python3 "$MENU" "$(readlink -f -- "$0")"
+    ;;
   status|st)
     check_up
     ver=$(api /version | python3 -c "import sys,json;print(json.load(sys.stdin).get('version','?'))")
     echo "mihomo 运行中, 版本 $ver, API $API"
-    now=$(api "/proxies/$GROUP" | python3 -c "import sys,json;print(json.load(sys.stdin).get('now','?'))")
+    now=$(api "/proxies/$(encode "$GROUP")" | python3 -c "import sys,json;print(json.load(sys.stdin).get('now','?'))")
     echo "当前 [$GROUP] 选中: $now"
     show_mode
     ;;
@@ -126,41 +149,49 @@ case "$cmd" in
     check_up
     api /proxies | python3 -c 'import sys,json
 d=json.load(sys.stdin)["proxies"]
+if sys.argv[1] == "--json":
+ print(json.dumps({k:v for k,v in d.items() if v.get("type") in ("Selector","URLTest","Fallback","LoadBalance")},ensure_ascii=False)); sys.exit()
 for k,v in d.items():
     t=v.get("type","")
-    if t in ("Selector","URLTest","Fallback","LoadBalance"): print("%s  (%s)  -> now: %s"%(k,t,v.get("now","")))'
+    if t in ("Selector","URLTest","Fallback","LoadBalance"): print("%s  (%s)  -> now: %s"%(k,t,v.get("now","")))' "${2:-}"
     ;;
   list|ls)
-    check_up; g="${2:-$GROUP}"
-    api "/proxies/$g" | python3 -c 'import sys,json
+    check_up; g="${2:-$GROUP}"; fmt="${3:-}"
+    if [ "$g" = --json ]; then g="$GROUP"; fmt=--json; fi
+    api "/proxies/$(encode "$g")" | python3 -c 'import sys,json
 d=json.load(sys.stdin); now=d.get("now")
-for i,name in enumerate(d.get("all",[]),1): print(("*" if name==now else " ")+f" {i:3d}  {name}")' 2>/dev/null || { echo "找不到策略组 '$g'"; exit 1; }
+if sys.argv[1] == "--json": print(json.dumps(d,ensure_ascii=False)); sys.exit()
+for i,name in enumerate(d.get("all",[]),1): print(("*" if name==now else " ")+f" {i:3d}  {name}")' "$fmt" 2>/dev/null || { echo "找不到策略组 '$g'"; exit 1; }
     ;;
   use|u)
-    check_up; g="$GROUP"; sel="${2:-}"
-    [ -z "$sel" ] && { echo "用法: mnode use <编号|名称> [-g 组名]"; exit 1; }
-    if [ "${3:-}" = "-g" ] && [ -n "${4:-}" ]; then g="$4"; fi
-    if [[ "$sel" =~ ^[0-9]+$ ]]; then
-      sel=$(api "/proxies/$g" | python3 -c "import sys,json;a=json.load(sys.stdin)['all'];print(a[$sel-1] if 0<$sel<=len(a) else '')")
-      [ -z "$sel" ] && { echo "编号超出范围"; exit 1; }
+    check_up; g="$GROUP"; shift; by_name=0
+    if [ "${1:-}" = --name ]; then by_name=1; shift; fi
+    sel="${1:-}"; [ -n "$sel" ] || { echo "用法: mnode use [--name] <编号|名称> [-g 组名]"; exit 1; }
+    shift
+    if [ "${1:-}" = -g ] && [ -n "${2:-}" ]; then g="$2"; shift 2; fi
+    [ "$#" -eq 0 ] || { echo "无效参数"; exit 1; }
+    if [ "$by_name" -eq 0 ] && [[ "$sel" =~ ^[0-9]+$ ]]; then
+      sel=$(api "/proxies/$(encode "$g")" | python3 -c 'import sys,json; a=json.load(sys.stdin)["all"]; i=int(sys.argv[1]); print(a[i-1] if 0<i<=len(a) else "")' "$sel")
+      [ -n "$sel" ] || { echo "编号超出范围"; exit 1; }
     fi
-    code=$(curl -s -o /dev/null -w "%{http_code}" "${auth[@]}" -X PUT "$API/proxies/$g" -H "Content-Type: application/json" -d "{\"name\":\"$sel\"}")
+    payload=$(python3 -c 'import json,sys; print(json.dumps({"name":sys.argv[1]}))' "$sel")
+    code=$(curl -sS --connect-timeout 5 --max-time 15 -o /dev/null -w "%{http_code}" "${auth[@]}" -X PUT "$API/proxies/$(encode "$g")" -H "Content-Type: application/json" -d "$payload")
     [ "$code" = 204 ] && echo "✓ [$g] 已切换到: $sel" || { echo "✗ 切换失败 (HTTP $code)"; exit 1; }
     ;;
   test|t)
     check_up; g="${2:-$GROUP}"; echo "正在对 [$g] 全部节点测速..."
-    api "/group/$g/delay?url=$TESTURL&timeout=5000" | python3 -c 'import sys,json
-for name,ms in sorted(json.load(sys.stdin).items(),key=lambda x:x[1]): print(f"{ms:5d} ms  {name}")' || echo "测速失败"
+    api "/group/$(encode "$g")/delay?url=$TESTURL&timeout=5000" | python3 -c 'import sys,json
+for name,ms in sorted(json.load(sys.stdin).items(),key=lambda x:x[1]): print(f"{ms:5d} ms  {name}")' || { echo "测速失败"; exit 1; }
     ;;
   ip)
     check_up; echo "通过 mixed port 查询出口 IP..."
-    curl -s --max-time 20 -x http://127.0.0.1:7890 https://ipinfo.io/json | python3 -c "import sys,json;d=json.load(sys.stdin);print('IP:',d.get('ip'),'| 地区:',d.get('country'),d.get('city'),'| ISP:',d.get('org'))" 2>&1 || echo "查询失败"
+    curl -fsS --max-time 20 -x http://127.0.0.1:7890 https://ipinfo.io/json | python3 -c "import sys,json;d=json.load(sys.stdin);print('IP:',d.get('ip'),'| 地区:',d.get('country'),d.get('city'),'| ISP:',d.get('org'))" 2>&1 || { echo "查询失败"; exit 1; }
     ;;
-  on) sudo systemctl start mihomo && echo "✓ mihomo 已启动"; sleep 2; "$0" status ;;
-  off) sudo systemctl stop mihomo && echo "✓ mihomo 已停止" ;;
+  on) service start mihomo || exit $?; echo "✓ mihomo 已启动"; sleep 2; "$0" status ;;
+  off) service stop mihomo && echo "✓ mihomo 已停止" ;;
   update|up)
     exec 9>"$LOCK"; flock 9
-    update_config
+    update_config "${2:-}"
     ;;
   help|*)
     cat <<'H'
@@ -170,7 +201,10 @@ mnode - mihomo 节点管理
 模式: mnode mode [mixed|tun] [--allow-ssh-risk]
 节点: mnode groups | list [组] | use <编号|名称> | test [组]
 更新: mnode update [< 新订阅文件]
-其他: mnode ip
+其他: mnode ip | tui (别名 menu)
+机器输出: mnode groups --json | list [组] --json
+按名称选择: mnode use --name <名称> [-g 组名]
+本地订阅: mnode update /path/to/sub.b64
 
 mixed 模式通过 127.0.0.1:7890 提供 HTTP 和 SOCKS5 代理。
 tun 模式启用透明代理并同时保留 7890 端口。
