@@ -77,7 +77,7 @@ class Menu:
             print('输入无效。')
 
     def subscription(self):
-        value = input('1 本地文件更新  2 粘贴订阅  3 现有订阅重建  0 返回: ').strip()
+        value = input('1 本地文件更新  2 粘贴订阅  3 现有订阅重建  4 订阅链接更新  0 返回: ').strip()
         if value == '1':
             name = input('文件路径（空则取消）: ')
             if name:
@@ -95,6 +95,20 @@ class Menu:
                 if source.tell():
                     source.seek(0)
                     self.run('update', stdin=source)
+        elif value == '4':
+            import importlib.util
+            from pathlib import Path
+            spec = importlib.util.spec_from_file_location('subscription_input', Path(__file__).resolve().parent / 'setup-wizard.py')
+            helper = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(helper)
+            try:
+                data = helper.subscription('A')
+                with tempfile.TemporaryFile() as source:
+                    source.write(data)
+                    source.seek(0)
+                    self.run('update', stdin=source)
+            except ValueError:
+                print('订阅获取取消或失败。')
         elif value == '3':
             # Empty input requests rebuilding with the stored subscription.
             with open(os.devnull) as source:

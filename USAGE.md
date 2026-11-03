@@ -1,6 +1,6 @@
 # mihomo 操作文档
 
-在命令行下使用 mihomo 代理的完整说明。默认关闭，用时开、用完关。
+安装与离线包准备见 [INSTALL.md](INSTALL.md)，更新记录见 [CHANGELOG.md](CHANGELOG.md)。上传完整软件包后运行 `sudo bash install.sh` 进入安装向导；日常操作使用 `mnode tui`。
 
 ## 一、概览
 
@@ -9,13 +9,13 @@
 | 主程序 | `/usr/local/bin/mihomo`（v1.19.28，amd64 compatible / arm64） |
 | 配置目录 | `/etc/mihomo/` |
 | 主配置 | `/etc/mihomo/config.yaml` |
-| 订阅原文 | `/etc/mihomo/sub.b64`（base64） |
+| 订阅原文 | `/etc/mihomo/sub.b64`（SS 明文/Base64 或 Clash YAML 原文） |
 | 转换脚本 | `/etc/mihomo/build-config.py` |
 | 节点管理命令 | `/usr/local/bin/mnode` |
 | systemd 服务 | `/etc/systemd/system/mihomo.service`（未开机自启） |
 | 本地混合端口 | `127.0.0.1:7890`（http + socks5 共用） |
 | 管理 API | `127.0.0.1:9090`（external-controller） |
-| 节点类型 | Shadowsocks（支持 simple-obfs） |
+| 节点类型 | SS 链接；Clash YAML 中内核支持的内嵌节点 |
 | 分流规则 | 国内直连（GEOIP,CN），其余走代理 |
 
 ## 数字菜单
@@ -36,7 +36,7 @@ mnode off     # 停止 mihomo
 mnode status  # 查看运行状态和当前选中节点
 ```
 
-服务不会开机自启，重启机器后需要 `mnode on` 手动开启。
+默认不启用开机自启；若安装向导中已选择开启，则重启后自动启动。否则需执行 `mnode on`。
 
 ## 三、选节点（CLI 版 zashboard）
 
@@ -95,7 +95,9 @@ unset https_proxy http_proxy all_proxy
 
 ## 六、更新订阅
 
-节点变动时更新。在可访问订阅服务的设备上获取 base64 或明文 ss:// 订阅，然后通过本地文件或菜单传入。
+节点变动时更新。支持 SS 明文/Base64 和含内嵌 `proxies` 的 Clash YAML；仅导入节点，不保留服务商的规则、DNS、分组或 TUN 设置。
+
+通过 `mnode tui` → `10 订阅与配置` → `4 订阅链接更新` 输入链接；获取失败可重试或改为粘贴。链接不会保存，订阅内容仍经现有验证和回滚流程提交。HTTP 链接需要明确确认；内容限制为 8 MiB。
 
 推荐用 `mnode update`，它会自动备份、生成、验证，失败自动回滚，服务在运行时还会自动重启使配置生效。
 

@@ -4,6 +4,23 @@
 
 `mnode` 通过 mihomo 的 `external-controller` REST API 操作，功能等价于 zashboard 里点选节点的操作。
 
+## 交互安装与离线包
+
+上传完整项目目录后运行 `sudo bash install.sh`，按中文向导选择本地资源或在线来源，再输入订阅链接、粘贴内容（单独一行 `.` 结束）或提供文件。支持 SS 明文/Base64 和含内嵌 `proxies` 的 Clash YAML；只导入节点，不采用服务商的规则、DNS、TUN 和监听配置，不支持仅含远程 provider 的订阅。
+
+首次安装确认后可启动本地 mixed 并查询出口；不修改系统路由、DNS、防火墙或全局代理变量。开机自启单独选择，默认关闭。Python、curl 等缺失时，向导可经确认使用现有系统源安装；离线包不包含发行版系统依赖。
+
+制作可上传的软件包（输出路径需自行指定）：
+
+```bash
+bash install.sh --bundle light --output /tmp/mnode-light.tar.gz
+bash install.sh --bundle offline --arch amd64 --output /tmp/mnode-amd64.tar.gz
+# arm64 使用 --arch arm64
+```
+
+打包只包含明确列出的项目和资源文件，不包含本地订阅；旁边生成 `.sha256` 文件。离线包仍需已有基础系统依赖。带参数的原安装方式保持兼容。
+
+
 ## 功能
 
 - 中文数字菜单（`mnode tui` / `mnode menu`），支持分页、筛选和切换策略组
@@ -13,7 +30,7 @@
 - 按编号或名称切换节点
 - 全组节点测速并按延迟排序
 - 查看当前出口 IP
-- 从 base64 订阅重建配置：候选配置验证、失败回滚、运行中自动重启
+- 从 SS 明文/Base64 或 Clash YAML 订阅重建配置：候选配置验证、失败回滚、运行中自动重启
 - 在 mixed-port 与 TUN 接入模式间安全切换（`mnode mode`）
 
 ## 依赖
@@ -21,18 +38,17 @@
 - [mihomo](https://github.com/MetaCubeX/mihomo) 二进制，且以 systemd 服务 `mihomo` 运行
 - mihomo 配置里开启了 `external-controller`（默认 `127.0.0.1:9090`）
 - `python3`、`curl`、`bash`
-- `build-config.py` 需要一个 base64 编码的 Shadowsocks (SIP002 `ss://`) 订阅
+- 订阅支持 Shadowsocks (SIP002 `ss://`) 明文/Base64，以及包含内嵌节点的 Clash YAML；YAML 解析组件已随项目附带
 
 ## 安装
 
-获取同一版本的完整项目文件和本地订阅后：
+获取同一版本完整项目并进入目录后：
 
 ```bash
-sudo bash install.sh --subscription ./sub.b64
-mnode tui
+sudo bash install.sh
 ```
 
-首次安装默认 mixed 模式，**不启动服务、不启用开机启动**。支持 Debian/Ubuntu、RHEL 系的 systemd 环境，amd64 compatible 和 arm64。需要 Python 3.8+、curl、util-linux（flock、unshare）及 root 网络命名空间权限。
+首次安装默认 mixed 模式，向导分别询问启动与开机自启，默认均不启用。带 `--subscription` 参数安装保持停止。支持 Debian/Ubuntu、RHEL 系的 systemd 环境，amd64 compatible 和 arm64。需要 Python 3.8+、curl、util-linux（flock、unshare）及 root 网络命名空间权限。
 
 在线来源、固定提交下载、依赖准备、`scp` 上传目录、离线安装和升级恢复见 [INSTALL.md](INSTALL.md)。常用离线命令：
 
@@ -88,10 +104,14 @@ export https_proxy=http://127.0.0.1:7890 http_proxy=http://127.0.0.1:7890 all_pr
 - `install.sh` / `install.py` — 安装、资源准备与升级
 - `assets.json` / `project-sha256.json` — 固定资源与 SHA-256 清单
 - `mnode-tui.py` — Python 标准库数字菜单
+- `setup-wizard.py` — 安装向导、订阅输入和软件包生成
+- `vendor/` — 随包提供的 PyYAML 及许可证
+- `test-setup.py` — YAML 导入隔离测试
+- `CHANGELOG.md` — 版本记录与已知限制
 - `INSTALL.md` — 在线与离线安装文档
 - `test-mnode.py` — 隔离回归测试
 - `mnode` — 主脚本
-- `build-config.py` — 把 base64 的 `ss://` 订阅转换成 mihomo `config.yaml`
+- `build-config.py` — 把 SS/Clash YAML 节点转换成受控 mihomo 配置
 - `USAGE.md` — 完整中文操作文档
 
 ## 安全说明

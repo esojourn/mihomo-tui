@@ -19,7 +19,7 @@ HERE = Path(__file__).resolve().parent
 BIN = Path('/usr/local/bin')
 CONFIG = Path('/etc/mihomo')
 UNIT = Path('/etc/systemd/system/mihomo.service')
-PROJECT = ('mnode', 'build-config.py', 'mnode-tui.py')
+PROJECT = ('mnode', 'build-config.py', 'mnode-tui.py', 'setup-wizard.py')
 SERVICE = '''[Unit]
 Description=mihomo proxy
 After=network-online.target
@@ -110,6 +110,7 @@ def dependencies(offline, download_only):
 
 
 def atomic_copy(source, target, mode):
+    target.parent.mkdir(parents=True, exist_ok=True)
     fd, name = tempfile.mkstemp(prefix='.mnode-', dir=target.parent)
     os.close(fd)
     try:
@@ -190,10 +191,11 @@ def install(opts, assets, manifest):
             run('unshare', '--net', '--', selected_kernel, '-d', stage, '-f', stage / 'config.yaml', '-t')
             changes = [(kernel, BIN / 'mihomo', 0o755),
                        (assets[1], geo_target, 0o600)]
+            changes += [(path, CONFIG / 'vendor' / path.relative_to(HERE / 'vendor'), 0o644) for path in (HERE / 'vendor').rglob('*.py')]
             changes += [(HERE / name, BIN / name if name == 'mnode' else CONFIG / name,
                          0o755 if name == 'mnode' else 0o600) for name in PROJECT]
             # Menu must be readable by the invoking (non-root) user.
-            changes = [(src, dst, 0o644 if dst.name == 'mnode-tui.py' else mode)
+            changes = [(src, dst, 0o644 if dst.name in ('mnode-tui.py', 'setup-wizard.py') else mode)
                        for src, dst, mode in changes]
             if fresh:
                 changes += [(stage / name, CONFIG / name, 0o600) for name in ('config.yaml', 'sub.b64')]
@@ -269,7 +271,7 @@ def main():
     # The locally supplied project bundle is verified before execution/installation.
     sums = json.loads((HERE / 'project-sha256.json').read_text())
     for name, expected in sums.items():
-        if Path(name).name != name:
+        if Path(name).is_absolute() or '..' in Path(name).parts:
             raise RuntimeError('项目校验清单含有无效路径')
         if not valid(HERE / name, expected):
             if name not in PROJECT or not opts.project_ref:

@@ -1,24 +1,40 @@
 # 安装、离线部署与升级
 
+## 交互安装与离线包
+
+上传完整项目目录后运行 `sudo bash install.sh`，按中文向导选择本地资源或在线来源，再输入订阅链接、粘贴内容（单独一行 `.` 结束）或提供文件。支持 SS 明文/Base64 和含内嵌 `proxies` 的 Clash YAML；只导入节点，不采用服务商的规则、DNS、TUN 和监听配置，不支持仅含远程 provider 的订阅。
+
+首次安装确认后可启动本地 mixed 并查询出口；不修改系统路由、DNS、防火墙或全局代理变量。开机自启单独选择，默认关闭。Python、curl 等缺失时，向导可经确认使用现有系统源安装；离线包不包含发行版系统依赖。
+
+制作可上传的软件包（输出路径需自行指定）：
+
+```bash
+bash install.sh --bundle light --output /tmp/mnode-light.tar.gz
+bash install.sh --bundle offline --arch amd64 --output /tmp/mnode-amd64.tar.gz
+# arm64 使用 --arch arm64
+```
+
+打包只包含明确列出的项目和资源文件，不包含本地订阅；旁边生成 `.sha256` 文件。离线包仍需已有基础系统依赖。带参数的原安装方式保持兼容。
+
+
 支持运行 systemd 的 Debian/Ubuntu、RHEL 系 Linux，amd64（compatible 构建）和 arm64。内核固定 `v1.19.28`，不查询最新版本。目标服务器无需 Git。安装过程需要 root 及网络命名空间权限（`unshare --net`）；受限容器不适用。
 
 ## 获取完整项目文件
 
-从本项目一个**包含安装器的已发布提交**获取下列文件，保持同一版本。`REV` 必须替换成该提交的完整 40 位 SHA；尚未发布的本地修改应直接复制整个文件集合，不能使用旧提交获取新文件。
+使用同一版本的完整项目压缩包或完整 Git checkout，保留 `vendor/` 目录。不要只下载入口脚本：项目校验清单包含安装器、运行脚本和 YAML 组件。
+
+联网机器可以使用上面的 `--bundle` 命令生成上传包。目标服务器无需 Git：
 
 ```bash
-mkdir -p ~/mnode-install
-cd ~/mnode-install
-REV=替换为包含本安装器的完整提交SHA
-for file in install.sh install.py assets.json project-sha256.json mnode build-config.py mnode-tui.py README.md USAGE.md INSTALL.md; do
-  curl -fL --connect-timeout 8 --max-time 45 \
-    "https://cdn.jsdelivr.net/gh/esojourn/mnode@$REV/$file" -o "$file" || break
-done
+sha256sum -c mnode-amd64.tar.gz.sha256
+tar -xzf mnode-amd64.tar.gz
+cd mnode
+sudo bash install.sh
 ```
 
-也可把域名换为 `testingcf.jsdelivr.net`、`gcore.jsdelivr.net`、`fastly.jsdelivr.net`，或从 `https://raw.githubusercontent.com/esojourn/mnode/$REV/文件名` 下载。安装器和校验清单应来自你信任的项目提交；摘要校验不能替代对安装器本身的信任。
+向导中选择严格离线即可禁止安装资源下载；若系统依赖缺失，入口会先询问是否调用包管理器，完全离线环境应取消并补齐依赖。在线模式优先使用校验通过的本地资源。
 
-`project-sha256.json` 记录本版项目文件摘要，`assets.json` 记录内核、数据库精确文件名、官方来源及可信 SHA-256。项目文件已完整上传时不访问项目 CDN；运行脚本缺失或损坏时，可加 `--project-ref "$REV"` 按上述 CDN 顺序和官方源补齐，仍必须匹配本地可信清单。离线模式始终禁止补下载。
+安装器及其摘要清单必须来自可信来源。现有 `--project-ref` 仅用于补齐可下载的运行脚本，不能替代完整软件包，尤其不能自动补齐 `vendor/`。
 
 ## 依赖
 
@@ -29,11 +45,11 @@ sudo apt install bash python3 curl ca-certificates util-linux systemd sudo
 sudo dnf install bash python3 curl ca-certificates util-linux systemd sudo
 ```
 
-需要 Python 3.8+。脚本不会安装依赖或替换软件源。完全离线时，在相同发行版、版本和架构的联网环境准备依赖包及其递归依赖；使用干净的同版容器/虚拟机可避免遗漏已安装依赖。Debian 系可用 `apt-offline` 工作流，或在该环境的 apt 缓存中收集 `apt-get --download-only install …` 的全部 deb；RHEL 系安装 `dnf-plugins-core` 后使用 `dnf download --resolve --alldeps …` 收集 rpm。连同包目录上传，使用本地包源安装并先确认上述命令均可用。不要仅上传一个 python3 或 curl 包。
+需要 Python 3.8+。向导会检测 Python、curl、util-linux，确认后使用现有 apt/dnf 安装缺项；带参数的非交互安装只检测依赖。不更换软件源，不能自动补齐 systemd 或所有 CA 环境问题。完全离线时，在相同发行版、版本和架构的联网环境准备依赖包及其递归依赖；使用干净的同版容器/虚拟机可避免遗漏已安装依赖。Debian 系可用 `apt-offline` 工作流，或在该环境的 apt 缓存中收集 `apt-get --download-only install …` 的全部 deb；RHEL 系安装 `dnf-plugins-core` 后使用 `dnf download --resolve --alldeps …` 收集 rpm。连同包目录上传，使用本地包源安装并先确认上述命令均可用。不要仅上传一个 python3 或 curl 包。
 
 ## 在线安装
 
-先把本地 Shadowsocks 订阅放到 `~/mnode-install/sub.b64`（支持 base64 或明文 `ss://`），权限设为 600：
+先把本地订阅放到 `~/mnode-install/sub.b64`（支持 Base64、明文 `ss://` 或含内嵌节点的 Clash YAML），权限设为 600：
 
 ```bash
 cd ~/mnode-install
@@ -46,7 +62,7 @@ mnode tui
 
 数据库固定提交 `1234686cec4ff41207931ee441a13ea4e26ebf13`，依次使用 cdn.jsdelivr.net、testingcf、gcore、fastly、官方 raw。jsDelivr 的 `/gh/` 用于仓库文件，不能作为 Release 附件的通用代理；多个域名也不是独立服务体系。参见 [jsDelivr 官方说明](https://github.com/jsdelivr/jsdelivr#github)。
 
-首次安装生成 mixed 配置，以候选内核和本地数据库在禁网命名空间内验证；配置明确关闭 GeoIP 自动更新。安装完成不会启动服务或开启自启，需要时执行 `mnode on`。
+首次安装生成 mixed 配置，以候选内核和本地数据库在禁网命名空间内验证；配置明确关闭 GeoIP 自动更新。上述带参数安装不会启动服务或开启自启。无参数向导在安装后单独询问是否启动并检查代理 HTTPS，以及是否启用自启。
 
 ## 离线准备与上传
 
@@ -63,6 +79,8 @@ bash install.sh --download-only --arch amd64 --assets-dir ./assets
 ~/mnode-install/
   install.sh
   install.py
+  setup-wizard.py
+  vendor/                         # YAML 解析组件及许可证
   assets.json
   project-sha256.json
   mnode
@@ -83,7 +101,7 @@ ARM64 对应 `mihomo-linux-arm64-v1.19.28.gz`。资源的完整地址、摘要�
 | arm64 内核压缩包 | [官方 Release](https://github.com/MetaCubeX/mihomo/releases/download/v1.19.28/mihomo-linux-arm64-v1.19.28.gz) | `/usr/local/bin/mihomo`（解压后） |
 | GeoIP | [固定官方提交](https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/1234686cec4ff41207931ee441a13ea4e26ebf13/geoip.metadb) | `/etc/mihomo/geoip.metadb` |
 | mnode | 上述固定提交项目地址 | `/usr/local/bin/mnode` |
-| build-config.py、mnode-tui.py | 上述固定提交项目地址 | `/etc/mihomo/` |
+| build-config.py、mnode-tui.py、setup-wizard.py、vendor/ | 上述固定提交项目地址 | `/etc/mihomo/` |
 | sub.b64 | 自行向订阅服务获取，不提供公共 URL | `/etc/mihomo/sub.b64`，600 |
 | config.yaml | 安装时本地生成 | `/etc/mihomo/config.yaml`，600 |
 | install.sh、install.py、两份清单 | 上述固定提交项目地址 | 留在上传目录，供升级使用 |
@@ -120,3 +138,11 @@ sudo --preserve-env=MIHOMO_API,MIHOMO_SECRET bash install.sh --upgrade
 前序方案报告 cdn/fastly/gcore/testingcf 固定 GeoIP 与官方一致，gh-proxy.org/ghfast.top/gh-proxy.com 的内核完整下载通过；其测试日期与原始日志未随方案提供，不能当作本轮复测。ghproxy.net 超时、kkgithub.com 404，未放入默认来源池。所有来源仍需在目标网络验证。
 
 运行 `python3 test-mnode.py` 执行隔离回归测试，使用模拟网络命令和 systemd，不修改开发机服务或路由。真实 systemd 重启、发行版依赖安装、网络命名空间权限及 TUN 路由仍应在目标同版虚拟机验收。
+
+## 当前实现边界
+
+- 来源探测按顺序对真实资源发送限时 Range 请求，显示耗时和速率。某些不支持 Range 的源可能被判失败；这不是长期稳定性保证。当前仅允许输入优先 Release 镜像，数据库沿用固定回退顺序，尚无完整的编号选源菜单。
+- 向导首次安装检查 7890/9090 端口；确认启动后检查 API 和代理 HTTPS，可进一步测试 GitHub。尚未实现低并发自动测速选节点，也不会自动切换后续资源下载路径；可在管理菜单手动测速、选节点。
+- YAML 仅导入内嵌节点，拒绝重复名称、远程 provider-only 配置以及外部证书文件/拨号依赖。不会保留供应商规则或分组。链接输入不持久保存、不提供定时刷新；终端输入可见，请注意终端录屏。
+- 参数 `--wizard` 与 `--bundle` 应作为第一个参数使用。向导自身不接受 `--offline` 等安装参数；严格离线通过菜单选择，自动化则使用原有带参数入口。
+- 2026-11-03：22 项原有隔离测试、3 项新增 YAML 测试、语法检查与轻量包生成通过。尚未进行新流程的真实生产服务器、ARM64 和完整离线虚拟机验收。

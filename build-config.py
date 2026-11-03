@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 # Convert a base64 Shadowsocks subscription (SIP002 ss:// links) into a mihomo config.yaml
 import argparse
+from pathlib import Path
 import base64, sys, urllib.parse, re, json, os
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "vendor"))
 
 SUB = "/etc/mihomo/sub.b64"
 OUT = "/etc/mihomo/config.yaml"
@@ -80,7 +83,29 @@ def main():
     opts = parse_args()
     with open(opts.subscription) as f:
         raw = f.read()
-    text = decode_sub(raw)
+    yaml_nodes = None
+    if not raw.strip().startswith("ss://"):
+        import yaml
+        try:
+            doc = yaml.safe_load(raw)
+            if isinstance(doc, dict):
+                yaml_nodes = doc.get("proxies")
+                if not isinstance(yaml_nodes, list) or not yaml_nodes:
+                    raise ValueError("Clash YAML 需要内嵌 proxies；不支持远程 provider")
+                def check_external(value):
+                    if isinstance(value, dict):
+                        if any(k in value for k in ('ca', 'certificate', 'private-key', 'dialer-proxy')):
+                            raise ValueError("不支持节点外部文件或拨号依赖")
+                        for v in value.values(): check_external(v)
+                    elif isinstance(value, list):
+                        for v in value: check_external(v)
+                check_external(yaml_nodes)
+                for node in yaml_nodes:
+                    if not isinstance(node, dict) or not all(k in node for k in ("name", "type", "server", "port")):
+                        raise ValueError("无效节点")
+        except yaml.YAMLError as exc:
+            raise ValueError("无效 YAML") from exc
+    text = "" if yaml_nodes is not None else decode_sub(raw)
     nodes, seen = [], {}
     for line in text.replace("\r", "\n").split("\n"):
         if not line.strip():
@@ -95,6 +120,11 @@ def main():
             n["name"] = f"{base} #{i+1}"
         seen[base] = i + 1
         nodes.append(n)
+    if yaml_nodes is not None:
+        nodes = yaml_nodes
+        names = [n['name'] for n in nodes]
+        if len(set(names)) != len(names):
+            raise ValueError("Clash 节点名称重复")
     if not nodes:
         print("ERROR: no nodes parsed", file=sys.stderr)
         sys.exit(1)
@@ -113,6 +143,7 @@ def main():
         ])
     L.extend(["geodata-mode: false", "geo-auto-update: false", "geox-url:", "  mmdb: \"\""])
     L.append("allow-lan: false")
+    L.append("bind-address: 127.0.0.1")
     L.append("mode: rule")
     L.append("log-level: info")
     L.append("ipv6: false")
@@ -121,6 +152,9 @@ def main():
     L.append("")
     L.append("proxies:")
     for n in nodes:
+        if yaml_nodes is not None:
+            L.append("  - " + json.dumps(n, ensure_ascii=False))
+            continue
         line = ("  - {name: %s, type: ss, server: %s, port: %d, cipher: %s, password: %s"
                 % (yesc(n["name"]), yesc(n["server"]), n["port"], yesc(n["cipher"]), yesc(n["password"])))
         if n.get("plugin") == "obfs":
