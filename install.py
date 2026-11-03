@@ -128,7 +128,7 @@ def active():
 def healthy():
     for _ in range(10):
         if active():
-            args = ['curl', '-fsS', '--connect-timeout', '1', '--max-time', '2']
+            args = ['curl', '--noproxy', '*', '-fsS', '--connect-timeout', '1', '--max-time', '2']
             if os.environ.get('MIHOMO_SECRET'):
                 args += ['-H', 'Authorization: Bearer ' + os.environ['MIHOMO_SECRET']]
             args += [os.environ.get('MIHOMO_API', 'http://127.0.0.1:9090') + '/version']

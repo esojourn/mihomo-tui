@@ -15,11 +15,11 @@ BUILD="$CONFIG_DIR/build-config.py"
 LOCK="$CONFIG_DIR/.mnode.lock"
 
 auth=(); [ -n "$SECRET" ] && auth=(-H "Authorization: Bearer $SECRET")
-api() { curl -fsS --connect-timeout 5 --max-time 45 "${auth[@]}" "$API$1" "${@:2}"; }
+api() { curl --noproxy '*' -fsS --connect-timeout 5 --max-time 45 "${auth[@]}" "$API$1" "${@:2}"; }
 
 check_up() {
-  if ! curl -fsS --max-time 2 "${auth[@]}" "$API/version" >/dev/null 2>&1; then
-    echo "✗ 连不上 mihomo API ($API)。先启动服务: mihomo-tui on"
+  if ! curl --noproxy '*' -fsS --max-time 2 "${auth[@]}" "$API/version" >/dev/null 2>&1; then
+    echo "✗ 连不上 mihomo API ($API)。请检查服务、API 地址及认证设置: systemctl status mihomo"
     exit 1
   fi
 }
@@ -175,7 +175,7 @@ for i,name in enumerate(d.get("all",[]),1): print(("*" if name==now else " ")+f"
       [ -n "$sel" ] || { echo "编号超出范围"; exit 1; }
     fi
     payload=$(python3 -c 'import json,sys; print(json.dumps({"name":sys.argv[1]}))' "$sel")
-    code=$(curl -sS --connect-timeout 5 --max-time 15 -o /dev/null -w "%{http_code}" "${auth[@]}" -X PUT "$API/proxies/$(encode "$g")" -H "Content-Type: application/json" -d "$payload")
+    code=$(curl --noproxy '*' -sS --connect-timeout 5 --max-time 15 -o /dev/null -w "%{http_code}" "${auth[@]}" -X PUT "$API/proxies/$(encode "$g")" -H "Content-Type: application/json" -d "$payload")
     [ "$code" = 204 ] && echo "✓ [$g] 已切换到: $sel" || { echo "✗ 切换失败 (HTTP $code)"; exit 1; }
     ;;
   test|t)

@@ -145,3 +145,17 @@ unset https_proxy http_proxy all_proxy
 ```
 
 命令仅针对本次 Shell 会话及之后启动的子进程，不修改 `.bashrc` 或系统配置，不影响其他终端和已经运行的服务。菜单只显示提示，不执行命令，也不会启动 mihomo。清除仅移除上述三个小写变量，不恢复旧值，不修改大写代理变量或 `no_proxy`。选择 `0 返回` 则继续使用菜单。
+
+### 设置代理后 API 不通或升级健康检查失败
+
+控制 API 请求与安装器健康检查现在强制直连（`curl --noproxy '*'`），避免 `http_proxy`/`all_proxy` 等变量把本地 9090 请求送进 7890 代理。资源下载仍可使用代理环境。此策略同样适用于自定义 `MIHOMO_API` 地址。
+
+旧版出现此问题时，先退出菜单，在当前终端执行：
+
+```bash
+unset https_proxy http_proxy all_proxy HTTPS_PROXY HTTP_PROXY ALL_PROXY
+curl --noproxy '*' --max-time 3 http://127.0.0.1:9090/version
+mnode status
+```
+
+直连仍失败时检查 `systemctl status mihomo --no-pager` 和 `journalctl -u mihomo -n 50 --no-pager`，确认服务监听和 API 配置；自定义 API 地址或 secret 时需使用对应设置。不要公开含凭据的日志或配置。直连成功后可再执行 `sudo bash install.sh --upgrade`，完整升级可能重启服务。

@@ -70,6 +70,14 @@ class Downloads(unittest.TestCase):
                 installer.dependencies(False, True)
 
 
+class HealthProxyTests(unittest.TestCase):
+    def test_health_check_bypasses_proxy(self):
+        with patch.dict(os.environ, http_proxy='http://127.0.0.1:1', all_proxy='socks5://127.0.0.1:1'), patch.object(installer, 'active', return_value=True), patch.object(installer, 'run', return_value=SimpleNamespace(returncode=0, stdout=b'{"version":"test"}')) as run:
+            self.assertTrue(installer.healthy())
+        args = run.call_args.args
+        self.assertEqual(args[args.index('--noproxy') + 1], '*')
+
+
 class Transactions(unittest.TestCase):
     def exercise(self, running=False, fail=False, upgrade=True):
         with tempfile.TemporaryDirectory() as temp:
@@ -220,6 +228,17 @@ else: print(json.dumps({'now':'123','all':['123','中文 " /?&','AUTO']}))
             self.assertTrue(any('%2F%3F%22' in arg for arg in args))
         self.assertEqual(self.cli('use', '002').returncode, 0)
         self.assertNotEqual(self.cli('use', '0').returncode, 0)
+
+    def test_control_api_bypasses_proxy_environment(self):
+        self.env.update(http_proxy='http://127.0.0.1:1', https_proxy='http://127.0.0.1:1',
+                        all_proxy='socks5://127.0.0.1:1', NO_PROXY='')
+        for args in [('groups', '--json'), ('use', '--name', 'AUTO'), ('test',)]:
+            self.assertEqual(self.cli(*args).returncode, 0)
+        calls = [json.loads(line) for line in (self.root / 'trace').read_text().splitlines()]
+        self.assertTrue(calls)
+        for args in calls:
+            self.assertIn('--noproxy', args)
+            self.assertEqual(args[args.index('--noproxy') + 1], '*')
 
     def test_failures_and_non_tty(self):
         self.env['FAIL_API'] = '1'
