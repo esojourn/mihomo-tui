@@ -183,3 +183,9 @@ curl -s "http://127.0.0.1:9090/group/PROXY/delay?url=http://www.gstatic.com/gene
 - 混合端口和管理 API 都只监听 `127.0.0.1`，仅本机可访问，未对外暴露。
 - `allow-lan: false`，不接受局域网其他设备连接。
 - 管理 API 无密码（`secret` 为空），因为只绑本地环回地址，风险可控。若日后开放 `allow-lan` 或改监听地址，务必先给 API 设置 `secret`。
+
+### 订阅下载兼容性
+
+订阅链接请求使用 `User-Agent: clash.meta`，安装向导与管理菜单一致；请求未主动使用本地 mixed，但会遵循进程的系统代理环境变量。旧版使用 Python 默认的 `Python-urllib/3.x`。
+
+获取失败会区分 HTTP 状态、DNS、TLS 证书和超时；HTTP 200 的 HTML 登录页/防护页也会提示。401/403 可能涉及凭据、IP 或 UA 限制，429 表示限流；修改 UA 无法解决所有问题。请检查链接有效性、服务器直连能力、系统时间与 CA 证书，或在可访问的设备获取原文后粘贴。不要在排错时公开带 token 的订阅 URL。成功获取但格式解析失败属于另一阶段，例如 provider-only YAML 不在支持范围内。

@@ -13,11 +13,37 @@ import tarfile
 import tempfile
 import time
 import urllib.request
+import urllib.error
+import ssl
+import http.client
 
 HERE = Path(__file__).resolve().parent
 
 def ask(prompt):
     return input(prompt).strip()
+
+SUBSCRIPTION_UA = 'clash.meta'
+
+def subscription_error(exc):
+    """Only return fixed messages: exception strings can contain private URLs."""
+    if isinstance(exc, urllib.error.HTTPError):
+        reasons = {401: '订阅凭据无效或已过期', 403: '服务商拒绝访问，可能是 UA、IP 限制或防护验证',
+                   404: '订阅地址不存在或已失效', 429: '请求过于频繁，请稍后重试'}
+        return f'HTTP {exc.code}：' + reasons.get(exc.code, '服务商返回错误或重定向异常')
+    reason = exc.reason if isinstance(exc, urllib.error.URLError) else exc
+    if isinstance(reason, ssl.SSLCertVerificationError):
+        return 'TLS 证书验证失败：检查系统时间、CA 证书和服务商证书'
+    if isinstance(reason, ssl.SSLError):
+        return 'TLS 握手失败：检查服务商 HTTPS 和网络连接'
+    if isinstance(reason, socket.gaierror):
+        return 'DNS 解析失败：检查服务器域名解析和网络'
+    if isinstance(reason, (TimeoutError, socket.timeout)):
+        return '连接或读取超时：服务器可能无法直连订阅站点'
+    if isinstance(reason, ConnectionRefusedError):
+        return '连接被拒绝：检查订阅站点或环境代理是否可用'
+    if isinstance(reason, ValueError):
+        return '链接无效或发生不安全重定向；请使用完整 HTTP(S) 订阅链接'
+    return '网络请求失败：检查连接、环境代理和订阅站点可达性'
 
 def subscription(choice=None):
     choice = choice or ask('A 输入订阅链接 / B 粘贴内容 / C 本地文件: ').upper()
@@ -32,10 +58,19 @@ def subscription(choice=None):
                     raise ValueError('拒绝不安全重定向')
                 return super().redirect_request(req, fp, code, msg, headers, newurl)
         try:
-            with urllib.request.build_opener(Redirect).open(url, timeout=30) as response:
+            request = urllib.request.Request(url, headers={
+                'User-Agent': SUBSCRIPTION_UA,
+                'Accept': 'application/yaml, text/yaml, text/plain, */*',
+                'Accept-Encoding': 'identity',
+            })
+            with urllib.request.build_opener(Redirect).open(request, timeout=30) as response:
                 data = response.read(8 * 1024 * 1024 + 1)
-        except Exception:
-            print('订阅获取失败，请重试或选择粘贴。')
+                prefix = data.lstrip()[:256].lower()
+                if 'text/html' in response.headers.get('Content-Type', '').lower() or prefix.startswith((b'<!doctype html', b'<html')):
+                    print('订阅站点返回 HTML 网页，可能是登录页或防护验证页；请使用真正的订阅链接，或粘贴订阅内容。')
+                    return subscription()
+        except (OSError, ValueError, http.client.HTTPException) as exc:
+            print('订阅获取失败：' + subscription_error(exc) + '。可重试或选择粘贴。')
             return subscription()
     elif choice == 'B':
         print('粘贴订阅，单独一行 . 结束：')
