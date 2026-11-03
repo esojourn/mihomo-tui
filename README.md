@@ -1,8 +1,8 @@
-# mnode
+# Mihomo TUI
 
-命令行下管理 [mihomo](https://github.com/MetaCubeX/mihomo)（Clash.Meta 内核）代理节点的小工具。适合在纯命令行服务器上使用——不需要 GUI、不需要 zashboard，直接在终端选节点、测速、切换。
+无需 GUI，通过中文终端菜单管理 [mihomo](https://github.com/MetaCubeX/mihomo)（Clash.Meta 内核）代理节点的小工具。适合在纯命令行服务器上使用——不需要 GUI、不需要 zashboard，直接在终端选节点、测速、切换。
 
-`mnode` 通过 mihomo 的 `external-controller` REST API 操作，功能等价于 zashboard 里点选节点的操作。
+`mihomo-tui` 通过 mihomo 的 `external-controller` REST API 操作，功能等价于 zashboard 里点选节点的操作。
 
 ## 交互安装与离线包
 
@@ -13,17 +13,19 @@
 制作可上传的软件包（输出路径需自行指定）：
 
 ```bash
-bash install.sh --bundle light --output /tmp/mnode-light.tar.gz
-bash install.sh --bundle offline --arch amd64 --output /tmp/mnode-amd64.tar.gz
+bash install.sh --bundle light --output /tmp/mihomo-tui-light.tar.gz
+bash install.sh --bundle offline --arch amd64 --output /tmp/mihomo-tui-amd64.tar.gz
 # arm64 使用 --arch arm64
 ```
 
 打包只包含明确列出的项目和资源文件，不包含本地订阅；旁边生成 `.sha256` 文件。离线包仍需已有基础系统依赖。带参数的原安装方式保持兼容。
 
 
+项目原名 **mnode**。新命令 `mihomo-tui` 无参数直接打开菜单；`mnode` 命令继续兼容，原配置目录、环境变量和服务名保持不变。
+
 ## 功能
 
-- 中文数字菜单（`mnode tui` / `mnode menu`），支持分页、筛选和切换策略组
+- 中文数字菜单（`mihomo-tui tui` / `mihomo-tui menu`），支持分页、筛选和切换策略组
 - 固定版本、多来源摘要校验安装，支持离线部署和升级回滚
 - 一键开关代理服务（`on` / `off`）
 - 列出策略组和节点，标注当前选中项
@@ -31,7 +33,7 @@ bash install.sh --bundle offline --arch amd64 --output /tmp/mnode-amd64.tar.gz
 - 全组节点测速并按延迟排序
 - 查看当前出口 IP
 - 从 SS 明文/Base64 或 Clash YAML 订阅重建配置：候选配置验证、失败回滚、运行中自动重启
-- 在 mixed-port 与 TUN 接入模式间安全切换（`mnode mode`）
+- 在 mixed-port 与 TUN 接入模式间安全切换（`mihomo-tui mode`）
 
 ## 依赖
 
@@ -64,17 +66,17 @@ sudo bash install.sh --upgrade --offline --assets-dir ./assets
 ## 快速上手
 
 ```bash
-mnode tui             # 中文数字菜单（也可 mnode menu）
-mnode on              # 启动 mihomo
-mnode list            # 列出节点，* 是当前选中
-mnode test            # 测速，按延迟排序
-mnode use 2           # 切到 2 号节点
-mnode use AUTO        # 交给自动测速组
-mnode ip              # 查看当前出口 IP
-mnode off             # 用完关掉
-mnode mode            # 查看当前接入模式
-mnode mode tun        # 切换到 TUN（远程 SSH 默认拒绝）
-mnode mode mixed      # 切回 7890 mixed-port
+mihomo-tui tui             # 中文数字菜单（也可 mihomo-tui menu）
+mihomo-tui on              # 启动 mihomo
+mihomo-tui list            # 列出节点，* 是当前选中
+mihomo-tui test            # 测速，按延迟排序
+mihomo-tui use 2           # 切到 2 号节点
+mihomo-tui use AUTO        # 交给自动测速组
+mihomo-tui ip              # 查看当前出口 IP
+mihomo-tui off             # 用完关掉
+mihomo-tui mode            # 查看当前接入模式
+mihomo-tui mode tun        # 切换到 TUN（远程 SSH 默认拒绝）
+mihomo-tui mode mixed      # 切回 7890 mixed-port
 ```
 
 `mixed` 模式通过 `127.0.0.1:7890` 提供 HTTP 和 SOCKS5 代理，需要应用显式使用代理端口。`tun` 模式启用系统透明代理并同时保留 7890 端口，通常不需要设置代理环境变量，但仍兼容需要显式代理的程序。远程 SSH 会话切换 TUN 可能导致断联，建议使用云控制台或第二条管理链路；确需从 SSH 操作时显式使用 `--allow-ssh-risk`。
@@ -89,7 +91,7 @@ export https_proxy=http://127.0.0.1:7890 http_proxy=http://127.0.0.1:7890 all_pr
 
 ## 配置约定
 
-`mnode` 支持以下环境变量覆盖默认值：
+`mihomo-tui` 支持以下环境变量覆盖默认值：
 
 | 变量 | 默认 | 说明 |
 |------|------|------|
@@ -110,7 +112,8 @@ export https_proxy=http://127.0.0.1:7890 http_proxy=http://127.0.0.1:7890 all_pr
 - `CHANGELOG.md` — 版本记录与已知限制
 - `INSTALL.md` — 在线与离线安装文档
 - `test-mnode.py` — 隔离回归测试
-- `mnode` — 主脚本
+- `mihomo-tui` — 默认打开菜单的新入口
+- `mnode` — 原有 CLI 与兼容入口
 - `build-config.py` — 把 SS/Clash YAML 节点转换成受控 mihomo 配置
 - `USAGE.md` — 完整中文操作文档
 

@@ -19,7 +19,7 @@ HERE = Path(__file__).resolve().parent
 BIN = Path('/usr/local/bin')
 CONFIG = Path('/etc/mihomo')
 UNIT = Path('/etc/systemd/system/mihomo.service')
-PROJECT = ('mnode', 'build-config.py', 'mnode-tui.py', 'setup-wizard.py')
+PROJECT = ('mihomo-tui', 'mnode', 'build-config.py', 'mnode-tui.py', 'setup-wizard.py')
 SERVICE = '''[Unit]
 Description=mihomo proxy
 After=network-online.target
@@ -192,8 +192,8 @@ def install(opts, assets, manifest):
             changes = [(kernel, BIN / 'mihomo', 0o755),
                        (assets[1], geo_target, 0o600)]
             changes += [(path, CONFIG / 'vendor' / path.relative_to(HERE / 'vendor'), 0o644) for path in (HERE / 'vendor').rglob('*.py')]
-            changes += [(HERE / name, BIN / name if name == 'mnode' else CONFIG / name,
-                         0o755 if name == 'mnode' else 0o600) for name in PROJECT]
+            changes += [(HERE / name, BIN / name if name in ('mnode', 'mihomo-tui') else CONFIG / name,
+                         0o755 if name in ('mnode', 'mihomo-tui') else 0o600) for name in PROJECT]
             # Menu must be readable by the invoking (non-root) user.
             changes = [(src, dst, 0o644 if dst.name in ('mnode-tui.py', 'setup-wizard.py') else mode)
                        for src, dst, mode in changes]
@@ -239,7 +239,7 @@ def install(opts, assets, manifest):
                 raise
             print(f'安装完成。备份及恢复清单: {backup}')
             if not was_active:
-                print('服务保持停止；需要时执行 mnode on。未启用开机启动。')
+                print('服务保持停止；需要时执行 mihomo-tui on。未启用开机启动。')
 
 
 def main():
@@ -277,8 +277,8 @@ def main():
             if name not in PROJECT or not opts.project_ref:
                 raise RuntimeError(f'项目文件缺失或校验失败: {HERE / name}；请获取同版完整项目文件，或用 --project-ref 补齐运行脚本。')
             asset = {'name': name, 'sha256': expected,
-                     'github_path': f'esojourn/mnode@{opts.project_ref}/{name}',
-                     'url': f'https://raw.githubusercontent.com/esojourn/mnode/{opts.project_ref}/{name}'}
+                     'github_path': f'esojourn/mihomo-tui@{opts.project_ref}/{name}',
+                     'url': f'https://raw.githubusercontent.com/esojourn/mihomo-tui/{opts.project_ref}/{name}'}
             fetch(asset, HERE, opts.offline, [])
     opts.assets_dir.mkdir(parents=True, exist_ok=True)
     selected = [a for a in manifest['assets'] if a.get('arch', arch) == arch]

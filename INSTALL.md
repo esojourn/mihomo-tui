@@ -9,8 +9,8 @@
 制作可上传的软件包（输出路径需自行指定）：
 
 ```bash
-bash install.sh --bundle light --output /tmp/mnode-light.tar.gz
-bash install.sh --bundle offline --arch amd64 --output /tmp/mnode-amd64.tar.gz
+bash install.sh --bundle light --output /tmp/mihomo-tui-light.tar.gz
+bash install.sh --bundle offline --arch amd64 --output /tmp/mihomo-tui-amd64.tar.gz
 # arm64 使用 --arch arm64
 ```
 
@@ -26,9 +26,9 @@ bash install.sh --bundle offline --arch amd64 --output /tmp/mnode-amd64.tar.gz
 联网机器可以使用上面的 `--bundle` 命令生成上传包。目标服务器无需 Git：
 
 ```bash
-sha256sum -c mnode-amd64.tar.gz.sha256
-tar -xzf mnode-amd64.tar.gz
-cd mnode
+sha256sum -c mihomo-tui-amd64.tar.gz.sha256
+tar -xzf mihomo-tui-amd64.tar.gz
+cd mihomo-tui
 sudo bash install.sh
 ```
 
@@ -49,13 +49,13 @@ sudo dnf install bash python3 curl ca-certificates util-linux systemd sudo
 
 ## 在线安装
 
-先把本地订阅放到 `~/mnode-install/sub.b64`（支持 Base64、明文 `ss://` 或含内嵌节点的 Clash YAML），权限设为 600：
+先把本地订阅放到 `~/mihomo-tui-install/sub.b64`（支持 Base64、明文 `ss://` 或含内嵌节点的 Clash YAML），权限设为 600：
 
 ```bash
-cd ~/mnode-install
+cd ~/mihomo-tui-install
 chmod 600 sub.b64
 sudo bash install.sh --subscription "$PWD/sub.b64"
-mnode tui
+mihomo-tui tui
 ```
 
 有效本地资源优先；网络下载写入临时文件，摘要匹配才落盘。每个资源最多 8 个源、每源一次尝试、连接超时 8 秒、单次最多 45 秒、总预算 180 秒。内核依次尝试 ghfast.top、gh-proxy.com、gh-proxy.org、GitHub 官方。可重复添加最多 4 个 `--mirror https://代理域名`，代理 URL 格式为 `代理域名/完整GitHub附件URL`。
@@ -76,14 +76,14 @@ bash install.sh --download-only --arch amd64 --assets-dir ./assets
 上传目录统一为：
 
 ```text
-~/mnode-install/
+~/mihomo-tui-install/
   install.sh
   install.py
   setup-wizard.py
   vendor/                         # YAML 解析组件及许可证
   assets.json
   project-sha256.json
-  mnode
+  mihomo-tui
   build-config.py
   mnode-tui.py
   README.md / USAGE.md / INSTALL.md
@@ -100,7 +100,7 @@ ARM64 对应 `mihomo-linux-arm64-v1.19.28.gz`。资源的完整地址、摘要�
 | amd64 内核压缩包 | [官方 Release](https://github.com/MetaCubeX/mihomo/releases/download/v1.19.28/mihomo-linux-amd64-compatible-v1.19.28.gz) | `/usr/local/bin/mihomo`（解压后） |
 | arm64 内核压缩包 | [官方 Release](https://github.com/MetaCubeX/mihomo/releases/download/v1.19.28/mihomo-linux-arm64-v1.19.28.gz) | `/usr/local/bin/mihomo`（解压后） |
 | GeoIP | [固定官方提交](https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/1234686cec4ff41207931ee441a13ea4e26ebf13/geoip.metadb) | `/etc/mihomo/geoip.metadb` |
-| mnode | 上述固定提交项目地址 | `/usr/local/bin/mnode` |
+| mihomo-tui | 上述固定提交项目地址 | `/usr/local/bin/mihomo-tui` |
 | build-config.py、mnode-tui.py、setup-wizard.py、vendor/ | 上述固定提交项目地址 | `/etc/mihomo/` |
 | sub.b64 | 自行向订阅服务获取，不提供公共 URL | `/etc/mihomo/sub.b64`，600 |
 | config.yaml | 安装时本地生成 | `/etc/mihomo/config.yaml`，600 |
@@ -108,9 +108,9 @@ ARM64 对应 `mihomo-linux-arm64-v1.19.28.gz`。资源的完整地址、摘要�
 | mihomo.service | 首次安装本地生成 | `/etc/systemd/system/mihomo.service` |
 
 ```bash
-scp -r ~/mnode-install user@server:~/
+scp -r ~/mihomo-tui-install user@server:~/
 ssh user@server
-cd ~/mnode-install
+cd ~/mihomo-tui-install
 sudo bash install.sh --offline --assets-dir "$PWD/assets" --subscription "$PWD/sub.b64"
 ```
 

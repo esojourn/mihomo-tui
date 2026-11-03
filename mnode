@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# mnode - mihomo 节点管理 (CLI 版 zashboard)
+# Mihomo TUI - 终端菜单与代理管理（mnode 兼容入口）
 set -euo pipefail
 umask 077
 
@@ -19,7 +19,7 @@ api() { curl -fsS --connect-timeout 5 --max-time 45 "${auth[@]}" "$API$1" "${@:2
 
 check_up() {
   if ! curl -fsS --max-time 2 "${auth[@]}" "$API/version" >/dev/null 2>&1; then
-    echo "✗ 连不上 mihomo API ($API)。先启动服务: mnode on"
+    echo "✗ 连不上 mihomo API ($API)。先启动服务: mihomo-tui on"
     exit 1
   fi
 }
@@ -49,7 +49,7 @@ show_mode() {
   elif [ "$mode" = mixed ]; then
     echo "Mixed port: 127.0.0.1:7890 (HTTP + SOCKS5)"
   else
-    echo "无法读取配置；使用 sudo mnode mode 查看模式"
+    echo "无法读取配置；使用 sudo mihomo-tui mode 查看模式"
   fi
   systemctl is-active --quiet mihomo && echo "服务状态: active" || echo "服务状态: inactive"
 }
@@ -93,7 +93,7 @@ apply_config() (
     fi
     echo "✓ mihomo 已重启，新配置生效"
   else
-    echo "· mihomo 当前未运行，下次 mnode on 时生效"
+    echo "· mihomo 当前未运行，下次 mihomo-tui on 时生效"
   fi
   echo "✓ 当前接入模式: $mode"
 )
@@ -137,7 +137,7 @@ case "$cmd" in
     if [ -z "${2:-}" ]; then show_mode; exit 0; fi
     target="$2"; allow_ssh=0
     [ "${3:-}" = "--allow-ssh-risk" ] && allow_ssh=1
-    case "$target" in mixed|tun) ;; *) echo "用法: mnode mode [mixed|tun] [--allow-ssh-risk]"; exit 1;; esac
+    case "$target" in mixed|tun) ;; *) echo "用法: mihomo-tui mode [mixed|tun] [--allow-ssh-risk]"; exit 1;; esac
     if [ "$target" = tun ] && { [ -n "${SSH_CONNECTION:-}" ] || [ -n "${SSH_CLIENT:-}" ]; } && [ "$allow_ssh" -ne 1 ]; then
       echo "✗ 检测到 SSH 会话。TUN 自动路由可能导致断联。请使用本地控制台，或显式加 --allow-ssh-risk。"
       exit 1
@@ -166,7 +166,7 @@ for i,name in enumerate(d.get("all",[]),1): print(("*" if name==now else " ")+f"
   use|u)
     check_up; g="$GROUP"; shift; by_name=0
     if [ "${1:-}" = --name ]; then by_name=1; shift; fi
-    sel="${1:-}"; [ -n "$sel" ] || { echo "用法: mnode use [--name] <编号|名称> [-g 组名]"; exit 1; }
+    sel="${1:-}"; [ -n "$sel" ] || { echo "用法: mihomo-tui use [--name] <编号|名称> [-g 组名]"; exit 1; }
     shift
     if [ "${1:-}" = -g ] && [ -n "${2:-}" ]; then g="$2"; shift 2; fi
     [ "$#" -eq 0 ] || { echo "无效参数"; exit 1; }
@@ -195,16 +195,16 @@ for name,ms in sorted(json.load(sys.stdin).items(),key=lambda x:x[1]): print(f"{
     ;;
   help|*)
     cat <<'H'
-mnode - mihomo 节点管理
+Mihomo TUI - 终端菜单与代理管理
 
-服务: mnode on | off | status
-模式: mnode mode [mixed|tun] [--allow-ssh-risk]
-节点: mnode groups | list [组] | use <编号|名称> | test [组]
-更新: mnode update [< 新订阅文件]
-其他: mnode ip | tui (别名 menu)
-机器输出: mnode groups --json | list [组] --json
-按名称选择: mnode use --name <名称> [-g 组名]
-本地订阅: mnode update /path/to/sub.b64
+服务: mihomo-tui on | off | status
+模式: mihomo-tui mode [mixed|tun] [--allow-ssh-risk]
+节点: mihomo-tui groups | list [组] | use <编号|名称> | test [组]
+更新: mihomo-tui update [< 新订阅文件]
+其他: mihomo-tui ip | tui (别名 menu)
+机器输出: mihomo-tui groups --json | list [组] --json
+按名称选择: mihomo-tui use --name <名称> [-g 组名]
+本地订阅: mihomo-tui update /path/to/sub.b64
 
 mixed 模式通过 127.0.0.1:7890 提供 HTTP 和 SOCKS5 代理。
 tun 模式启用透明代理并同时保留 7890 端口。

@@ -70,7 +70,7 @@ def bundle(args):
     output = Path(args.output).resolve()
     with tarfile.open(output, 'w:gz') as archive:
         for name in sorted(set(names)):
-            archive.add(HERE / name, arcname='mnode/' + name, recursive=False)
+            archive.add(HERE / name, arcname='mihomo-tui/' + name, recursive=False)
     Path(str(output) + '.sha256').write_text(mod.digest(output) + '  ' + output.name + '\n')
     print('软件包已生成:', output)
 
@@ -85,7 +85,7 @@ def main():
         if not args.output: p.error('需要 --output')
         return bundle(args)
     if not sys.stdin.isatty(): raise ValueError('向导需要终端；自动化请使用 --subscription 文件')
-    print('mnode 安装向导：本地 mixed，不修改路由、DNS、防火墙或全局代理。')
+    print('Mihomo TUI 安装向导：本地 mixed，不修改路由、DNS、防火墙或全局代理。')
     mod = installer()
     offline = ask('1 在线安装（优先本地资源） / 2 严格离线: ') == '2'
     command = ['bash', str(HERE / 'install.sh')]
@@ -115,7 +115,7 @@ def main():
         if ask('安装到 /usr/local/bin 和 /etc/mihomo；确认请输入 YES: ') != 'YES': return
         subprocess.run(command, check=True)
     if fresh and ask('启动本地 mixed 并验通？[y/N] ').lower() == 'y':
-        subprocess.run(['mnode', 'on'], check=True)
+        subprocess.run(['mihomo-tui', 'on'], check=True)
         if not mod.healthy():
             print('已安装，但服务/API 健康检查失败。请进入菜单检查。')
         else:
@@ -125,7 +125,7 @@ def main():
                 subprocess.run(['curl', '-fLsS', '--proxy', 'http://127.0.0.1:7890', '--noproxy', '', '--max-time', '20', '-o', os.devnull, 'https://github.com'])
         if ask('启用开机自启？[y/N] ').lower() == 'y':
             subprocess.run(['systemctl', 'enable', 'mihomo'], check=True)
-    if ask('进入管理菜单？[Y/n] ').lower() != 'n': subprocess.run(['mnode', 'tui'])
+    if ask('进入管理菜单？[Y/n] ').lower() != 'n': subprocess.run(['mihomo-tui', 'tui'])
 
 if __name__ == '__main__':
     os.umask(0o077)

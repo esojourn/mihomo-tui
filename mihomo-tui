@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Mihomo TUI: menu-first entrypoint; mnode remains compatible.
+set -euo pipefail
+HERE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+if [[ $# == 0 ]]; then
+  set -- tui
+fi
+exec "$HERE/mnode" "$@"
