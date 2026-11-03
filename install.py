@@ -149,10 +149,15 @@ def compatible_service():
         return False
     result = run('systemctl', 'show', 'mihomo', '--property=ExecStart', '--value',
                  stdout=subprocess.PIPE, text=True)
-    # Fail closed for custom arguments/paths, including overriding drop-ins.
-    expected = 'argv[]=/usr/local/bin/mihomo -d /etc/mihomo -f /etc/mihomo/config.yaml ;'
-    if expected not in result.stdout or 'path=/usr/local/bin/mihomo ;' not in result.stdout:
-        raise RuntimeError('现有 mihomo 服务路径/参数不兼容，请先人工核对 systemctl cat mihomo。')
+    # Both forms use /etc/mihomo/config.yaml. Keep existing unit settings.
+    allowed = {
+        '/usr/local/bin/mihomo -d /etc/mihomo',
+        '/usr/local/bin/mihomo -d /etc/mihomo -f /etc/mihomo/config.yaml',
+    }
+    paths = re.findall(r'(?:\{|;)\s*path=([^;]+?)\s*;', result.stdout)
+    arguments = re.findall(r'argv\[\]=([^;]+?)\s*;', result.stdout)
+    if paths != ['/usr/local/bin/mihomo'] or len(arguments) != 1 or arguments[0] not in allowed:
+        raise RuntimeError('现有 mihomo 服务路径/参数不兼容。支持 ExecStart=/usr/local/bin/mihomo -d /etc/mihomo，可选 -f /etc/mihomo/config.yaml；不会覆盖其他安装方式的服务。请执行 systemctl --no-pager cat mihomo 和 systemctl --no-pager --full show mihomo -p ExecStart -p FragmentPath -p DropInPaths 核对。')
     return True
 
 
@@ -267,6 +272,8 @@ def main():
     if not opts.download_only and os.geteuid() != 0:
         parser.error('安装需要 root，请使用 sudo bash install.sh …')
     dependencies(opts.offline, opts.download_only)
+    if not opts.download_only:
+        compatible_service()  # 在任何下载前检查；提交时仍在锁内重新检查。
     manifest = json.loads((HERE / 'assets.json').read_text())
     # The locally supplied project bundle is verified before execution/installation.
     sums = json.loads((HERE / 'project-sha256.json').read_text())

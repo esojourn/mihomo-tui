@@ -159,3 +159,16 @@ mnode status
 ```
 
 直连仍失败时检查 `systemctl status mihomo --no-pager` 和 `journalctl -u mihomo -n 50 --no-pager`，确认服务监听和 API 配置；自定义 API 地址或 secret 时需使用对应设置。不要公开含凭据的日志或配置。直连成功后可再执行 `sudo bash install.sh --upgrade`，完整升级可能重启服务。
+
+### 已有配置与服务的安装检查
+
+向导检测已有配置后保留配置和订阅，直接调用安装后端，不会再次进入向导。取消安装或安装失败时不会继续打开管理菜单。镜像选择使用编号，只针对内核 Release；数据库 CDN 文件地址不能作为 Release 镜像。
+
+测速和资源下载前先检查现有服务兼容性。若提示不兼容，请执行：
+
+```bash
+systemctl --no-pager cat mihomo
+systemctl --no-pager --full show mihomo -p ExecStart -p FragmentPath -p DropInPaths
+```
+
+安装器支持 `ExecStart=/usr/local/bin/mihomo -d /etc/mihomo`，也支持显式添加 `-f /etc/mihomo/config.yaml`；两者读取同一配置，保留现有服务的资源限制、权限、重启和重载设置。其他路径、参数或 drop-in 覆盖需要先核对并规划迁移；不要直接删除旧服务或配置。普通安装仍只补缺失文件，更新已安装程序需 `--upgrade`。

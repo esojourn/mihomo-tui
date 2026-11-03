@@ -171,6 +171,19 @@ class FreshInstall(unittest.TestCase):
                         self.assertIn('ExecStart=', unit.read_text())
                     self.assertFalse(any(c[:2] in [('systemctl', 'start'), ('systemctl', 'enable')] for c in calls))
 
+    def test_service_default_and_explicit_config(self):
+        for suffix in ('', ' -f /etc/mihomo/config.yaml'):
+            output = '{ path=/usr/local/bin/mihomo ; argv[]=/usr/local/bin/mihomo -d /etc/mihomo' + suffix + ' ; ignore_errors=no ; }'
+            with patch.object(installer, 'run', side_effect=[SimpleNamespace(stdout='loaded'), SimpleNamespace(stdout=output)]):
+                self.assertTrue(installer.compatible_service())
+
+    def test_service_different_config_and_extra_flags_rejected(self):
+        for suffix in (' -f /tmp/other.yaml', ' -ext-ctl 0.0.0.0:9090', ' -f /etc/mihomo/config.yaml -t'):
+            output = '{ path=/usr/local/bin/mihomo ; argv[]=/usr/local/bin/mihomo -d /etc/mihomo' + suffix + ' ; ignore_errors=no ; }'
+            with patch.object(installer, 'run', side_effect=[SimpleNamespace(stdout='loaded'), SimpleNamespace(stdout=output)]):
+                with self.assertRaisesRegex(RuntimeError, '不兼容'):
+                    installer.compatible_service()
+
     def test_service_incompatible(self):
         with patch.object(installer, 'run', side_effect=[SimpleNamespace(stdout='loaded'), SimpleNamespace(stdout='argv[]=/opt/mihomo')]):
             with self.assertRaisesRegex(RuntimeError, '不兼容'):

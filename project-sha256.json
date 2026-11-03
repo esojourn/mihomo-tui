@@ -1,11 +1,11 @@
 {
   "assets.json": "4cc20827806df6b7bb65b42b24234a1c0047cdef952b78d6b6c81f7b2c079462",
   "build-config.py": "639bd152372a04c42f878530e6ff6ad25060b72bc7c37e866571108f33da95a0",
-  "install.py": "864799b1d76d4aac14c64c83618811e7a3d956bc1c0c9a3e89adedf3f1958639",
+  "install.py": "81491acda82f8c59e0a3822c10e163b411ac29dd0aab112f13ddb40e3afa93d9",
   "install.sh": "5a07823711b260f6567b243dfd00c4e65f519b31bd27b1273b7285931f73412d",
   "mnode": "ffc6db9115da04dc06d0872e3a7fec1d5edbef9c54b75fd9cd82e8c698e65a16",
   "mnode-tui.py": "6ce4754c87360a0089ccbff6f2a0e3e2737477051e682e96c14d2469b3a7ec3f",
-  "setup-wizard.py": "f654659e1d8fb12085fc9883d5033061ee09fe6edfaf450f3e27a07e97aecd87",
+  "setup-wizard.py": "5de92fbcbbc925cd7fb119cb1f9810a3e1d144b11d5cd04506a6a18d664a1862",
   "vendor/PyYAML-LICENSE": "45f2bd1337c3a154cc47b3e9dac295708f8eb8c919c8b821451a1214ad4e6ad1",
   "vendor/yaml/__init__.py": "6e1974e6a49e3bed59c654918c6aef9769bd9eb5dbd67f7e1906ad4cdd0caea7",
   "vendor/yaml/composer.py": "fcaa37d16afa783594794a5ab94193dcb720f503c19ce3d59539c8311189f453",

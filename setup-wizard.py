@@ -109,6 +109,30 @@ def bundle(args):
     Path(str(output) + '.sha256').write_text(mod.digest(output) + '  ' + output.name + '\n')
     print('软件包已生成:', output)
 
+def choose_mirror():
+    mirrors = ['https://ghfast.top', 'https://gh-proxy.com', 'https://gh-proxy.org']
+    print('内核 Release 下载源（数据库使用独立来源，不能填入这里）：')
+    print('0 默认回退顺序')
+    for index, mirror in enumerate(mirrors, 1):
+        print(f'{index} {mirror}')
+    print('4 自定义 HTTPS 镜像根地址')
+    while True:
+        choice = ask('请选择编号 [0]: ') or '0'
+        if choice == '0':
+            return None
+        if choice in ('1', '2', '3'):
+            return mirrors[int(choice) - 1]
+        if choice == '4':
+            value = ask('镜像根地址，例如 https://ghfast.top（不是资源文件 URL）: ')
+            parts = urllib.parse.urlsplit(value)
+            if (parts.scheme == 'https' and parts.hostname and not parts.username
+                    and not parts.password and parts.path in ('', '/')
+                    and not parts.query and not parts.fragment):
+                return value.rstrip('/')
+            print('请输入 HTTPS 镜像根地址，不接受数据库、CDN 文件或完整下载链接。')
+        else:
+            print('请选择编号；不要粘贴测试结果中的资源 URL。')
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--wizard', action='store_true')
@@ -122,8 +146,12 @@ def main():
     if not sys.stdin.isatty(): raise ValueError('向导需要终端；自动化请使用 --subscription 文件')
     print('Mihomo TUI 安装向导：本地 mixed，不修改路由、DNS、防火墙或全局代理。')
     mod = installer()
+    if os.geteuid() != 0:
+        raise RuntimeError('安装需要 root，请执行 sudo bash install.sh。')
+    mod.dependencies(False, False)
+    mod.compatible_service()
     offline = ask('1 在线安装（优先本地资源） / 2 严格离线: ') == '2'
-    command = ['bash', str(HERE / 'install.sh')]
+    command = [sys.executable, str(HERE / 'install.py')]
     if offline: command.append('--offline')
     elif ask('测试下载来源？[y/N] ').lower() == 'y':
         manifest = json.loads((HERE / 'assets.json').read_text())
@@ -134,9 +162,11 @@ def main():
                 start = time.monotonic()
                 result = subprocess.run(['curl', '-fLsS', '--range', '0-65535', '--max-filesize', '1048576', '--connect-timeout', '3', '--max-time', '5', '-o', os.devnull, '-w', '%{speed_download}', url], capture_output=True, text=True)
                 print(('可用' if result.returncode == 0 else '失败'), round(time.monotonic()-start, 2), '秒', result.stdout, 'B/s', url)
-        mirror = ask('优先 Release 镜像 HTTPS 地址（空则默认顺序）: ')
+        mirror = choose_mirror()
         if mirror: command += ['--mirror', mirror]
-    fresh = not Path('/etc/mihomo/config.yaml').exists()
+    fresh = not (mod.CONFIG / 'config.yaml').exists()
+    if not fresh:
+        print('检测到已有配置，保留现有配置和订阅。')
     if fresh:
         for port in (7890, 9090):
             with socket.socket() as sock:
@@ -150,7 +180,7 @@ def main():
         if ask('安装到 /usr/local/bin 和 /etc/mihomo；确认请输入 YES: ') != 'YES': return
         subprocess.run(command, check=True)
     if fresh and ask('启动本地 mixed 并验通？[y/N] ').lower() == 'y':
-        subprocess.run(['mihomo-tui', 'on'], check=True)
+        subprocess.run([str(mod.BIN / 'mihomo-tui'), 'on'], check=True)
         if not mod.healthy():
             print('已安装，但服务/API 健康检查失败。请进入菜单检查。')
         else:
@@ -160,12 +190,21 @@ def main():
                 subprocess.run(['curl', '-fLsS', '--proxy', 'http://127.0.0.1:7890', '--noproxy', '', '--max-time', '20', '-o', os.devnull, 'https://github.com'])
         if ask('启用开机自启？[y/N] ').lower() == 'y':
             subprocess.run(['systemctl', 'enable', 'mihomo'], check=True)
-    if ask('进入管理菜单？[Y/n] ').lower() != 'n': subprocess.run(['mihomo-tui', 'tui'])
+    if ask('进入管理菜单？[Y/n] ').lower() != 'n': subprocess.run([str(mod.BIN / 'mihomo-tui'), 'tui'], check=True)
 
 if __name__ == '__main__':
     os.umask(0o077)
     try: main()
     except (EOFError, KeyboardInterrupt): print('\n已取消')
+    except subprocess.CalledProcessError as exc:
+        print(f'安装或子命令失败（退出码 {exc.returncode}），请查看上方具体原因；未进入后续菜单。', file=sys.stderr)
+        sys.exit(1)
+    except RuntimeError as exc:
+        print('安装无法继续：' + str(exc), file=sys.stderr)
+        sys.exit(1)
+    except FileNotFoundError:
+        print('所需程序或项目文件不存在，请确认完整项目包和系统依赖已安装。', file=sys.stderr)
+        sys.exit(1)
     except Exception as exc:
         print('操作失败:', type(exc).__name__, file=sys.stderr)
         sys.exit(1)

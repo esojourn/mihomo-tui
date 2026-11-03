@@ -4,7 +4,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 import io
 import socket
 import ssl
@@ -67,5 +67,40 @@ class FetchTests(unittest.TestCase):
         with patch.object(wizard, 'ask', side_effect=['https://example.invalid', 'B']), patch('builtins.input', side_effect=['ss://synthetic', '.']), patch.object(wizard.urllib.request, 'build_opener') as factory:
             factory.return_value.open.return_value = response
             self.assertEqual(wizard.subscription('A'), b'ss://synthetic')
+
+class WizardFlowTests(unittest.TestCase):
+    def exercise(self, answers, failure=None, incompatible=False):
+        with tempfile.TemporaryDirectory() as temp:
+            config = Path(temp)
+            (config / 'config.yaml').write_text('existing')
+            mod = Mock(CONFIG=config, BIN=config / 'bin')
+            if incompatible:
+                mod.compatible_service.side_effect = RuntimeError('incompatible')
+            with patch.object(wizard, 'installer', return_value=mod), patch.object(wizard.sys, 'argv', ['setup-wizard.py']), patch.object(wizard.sys.stdin, 'isatty', return_value=True), patch.object(wizard.os, 'geteuid', return_value=0), patch.object(wizard, 'ask', side_effect=answers), patch.object(wizard.subprocess, 'run', side_effect=failure) as run:
+                if incompatible or failure:
+                    with self.assertRaises((RuntimeError, subprocess.CalledProcessError)):
+                        wizard.main()
+                else:
+                    wizard.main()
+                return run.call_args_list
+
+    def test_existing_config_calls_backend_once(self):
+        calls = self.exercise(['1', 'n', 'YES', 'n'])
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0].args[0], [sys.executable, str(ROOT / 'install.py')])
+
+    def test_cancel_does_not_install_or_open_menu(self):
+        self.assertEqual(self.exercise(['1', 'n', '']), [])
+
+    def test_backend_failure_stops_flow(self):
+        calls = self.exercise(['1', 'n', 'YES'], subprocess.CalledProcessError(1, ['installer']))
+        self.assertEqual(len(calls), 1)
+
+    def test_incompatible_service_stops_before_network(self):
+        self.assertEqual(self.exercise([], incompatible=True), [])
+
+    def test_mirror_number_and_bad_resource_url(self):
+        with patch.object(wizard, 'ask', side_effect=['4', 'https://cdn.jsdelivr.net/gh/project/file.metadb', '2']):
+            self.assertEqual(wizard.choose_mirror(), 'https://gh-proxy.com')
 
 if __name__ == '__main__': unittest.main()
