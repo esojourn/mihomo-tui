@@ -330,6 +330,27 @@ class MenuTests(unittest.TestCase):
             menu.subscription()
             run.assert_not_called()
 
+    def test_proxy_environment_prints_command_and_exits(self):
+        for choice, command in [('1', 'export https_proxy=http://127.0.0.1:7890 http_proxy=http://127.0.0.1:7890 all_proxy=socks5://127.0.0.1:7890'),
+                                ('2', 'unset https_proxy http_proxy all_proxy')]:
+            menu = tui.Menu(str(ROOT / 'mnode'))
+            output = io.StringIO()
+            before = dict(os.environ)
+            with contextlib.redirect_stdout(output), patch('builtins.input', side_effect=['12', choice]) as prompt, patch.object(menu, 'run') as run:
+                menu.loop()
+            self.assertEqual(prompt.call_count, 2)
+            run.assert_not_called()
+            self.assertEqual(dict(os.environ), before)
+            self.assertIn(command, output.getvalue())
+            self.assertIn('本次 Shell 会话', output.getvalue())
+            self.assertIn('菜单未执行', output.getvalue())
+
+    def test_proxy_environment_cancel_returns_to_menu(self):
+        menu = tui.Menu(str(ROOT / 'mnode'))
+        with patch('builtins.input', side_effect=['12', '0', '0']) as prompt:
+            menu.loop()
+        self.assertEqual(prompt.call_count, 3)
+
     def test_eof(self):
         with patch.object(tui.sys.stdin, 'isatty', return_value=True), patch.object(tui.sys.stdout, 'isatty', return_value=True), patch.object(tui.sys, 'argv', ['menu', str(ROOT / 'mnode')]), patch('builtins.input', side_effect=EOFError):
             self.assertEqual(tui.main(), 0)

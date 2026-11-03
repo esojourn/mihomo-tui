@@ -189,3 +189,16 @@ curl -s "http://127.0.0.1:9090/group/PROXY/delay?url=http://www.gstatic.com/gene
 订阅链接请求使用 `User-Agent: clash.meta`，安装向导与管理菜单一致；请求未主动使用本地 mixed，但会遵循进程的系统代理环境变量。旧版使用 Python 默认的 `Python-urllib/3.x`。
 
 获取失败会区分 HTTP 状态、DNS、TLS 证书和超时；HTTP 200 的 HTML 登录页/防护页也会提示。401/403 可能涉及凭据、IP 或 UA 限制，429 表示限流；修改 UA 无法解决所有问题。请检查链接有效性、服务器直连能力、系统时间与 CA 证书，或在可访问的设备获取原文后粘贴。不要在排错时公开带 token 的订阅 URL。成功获取但格式解析失败属于另一阶段，例如 provider-only YAML 不在支持范围内。
+
+### 本次会话的代理环境
+
+运行 `mihomo-tui`，选择 **12 设置/清除代理环境（命令提示）**，再选择设置或清除。菜单显示对应命令后退出，请在当前终端自行粘贴执行：
+
+```bash
+# 设置
+export https_proxy=http://127.0.0.1:7890 http_proxy=http://127.0.0.1:7890 all_proxy=socks5://127.0.0.1:7890
+# 清除
+unset https_proxy http_proxy all_proxy
+```
+
+命令仅针对本次 Shell 会话及之后启动的子进程，不修改 `.bashrc` 或系统配置，不影响其他终端和已经运行的服务。菜单只显示提示，不执行命令，也不会启动 mihomo。清除仅移除上述三个小写变量，不恢复旧值，不修改大写代理变量或 `no_proxy`。选择 `0 返回` 则继续使用菜单。

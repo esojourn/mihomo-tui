@@ -116,9 +116,26 @@ class Menu:
         elif value != '0':
             print('输入无效。')
 
+    def proxy_environment(self):
+        value = input('1 设置代理环境  2 清除代理环境  0 返回（仅本次 Shell 会话）: ').strip()
+        if value == '0':
+            return False
+        if value not in ('1', '2'):
+            print('输入无效。')
+            return False
+        action = 'set' if value == '1' else 'clear'
+        command = ('export https_proxy=http://127.0.0.1:7890 '
+                   'http_proxy=http://127.0.0.1:7890 all_proxy=socks5://127.0.0.1:7890'
+                   if action == 'set' else 'unset https_proxy http_proxy all_proxy')
+        print('即将退出菜单。请在当前终端粘贴并执行以下命令：')
+        print(command)
+        print('命令仅针对本次 Shell 会话及之后启动的子进程，不修改持久配置。')
+        print('菜单未执行此命令，请自行粘贴执行。')
+        return True
+
     def loop(self):
         while True:
-            print(f'\n当前策略组: {self.group}\n1 服务状态  2 启动  3 停止\n4 策略组  5 节点列表/切换  6 选择 AUTO\n7 测速  8 接入模式  9 出口 IP\n10 订阅与配置  11 帮助  0 退出')
+            print(f'\n当前策略组: {self.group}\n1 服务状态  2 启动  3 停止\n4 策略组  5 节点列表/切换  6 选择 AUTO\n7 测速  8 接入模式  9 出口 IP\n10 订阅与配置  11 帮助  12 设置/清除代理环境（命令提示）  0 退出')
             value = input('请选择: ').strip()
             try:
                 if value == '0':
@@ -147,6 +164,9 @@ class Menu:
                         self.run(*args)
                     elif mode != '0':
                         print('输入无效。')
+                elif value == '12':
+                    if self.proxy_environment():
+                        return
                 elif value == '10':
                     self.subscription()
                 else:
